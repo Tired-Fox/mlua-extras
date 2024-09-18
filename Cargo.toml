@@ -1,0 +1,17 @@
+[package]
+name = "mlua-extras"
+version = "0.1.0"
+edition = "2021"
+
+[features]
+uv = ["dep:libuv"]
+
+[dev-dependencies]
+mlua = { version = "0.9.9", features = ["lua54", "vendored"] }
+tokio = { version = "1.40.0", features = ["rt-multi-thread", "macros", "net", "signal", "time"] }
+
+[dependencies]
+libuv = { version = "2.9.0", optional = true }
+mlua = { version = "0.9.9", features = ["async", "unstable"] }
+parking_lot = { version = "0.12.3", features = ["send_guard"] }
+parse = "0.1.2"
