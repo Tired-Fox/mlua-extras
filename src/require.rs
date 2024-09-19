@@ -24,7 +24,7 @@ impl Import for Lua {
 
         match segments.last() {
             Some(seg) => module.get::<_, R>(*seg),
-            None => Err(Error::runtime(format!("module not found: {}", path.as_ref())))
+            None => Err(Error::runtime(format!("module not found: {:?}", path.as_ref())))
         }
     }
 }
@@ -44,7 +44,10 @@ impl<'lua> TableImport<'lua> for Table<'lua> {
     }
 
     fn require<R: FromLua<'lua>>(&'lua self, path: impl AsRef<str>) -> mlua::Result<R> {
-        let segments = path.as_ref().split('.').collect::<Vec<_>>();
+        let segments = path.as_ref()
+            .split('.')
+            .filter_map(|v| (!v.trim().is_empty()).then_some(v.trim()))
+            .collect::<Vec<_>>();
 
         let mut module = self.clone();
         if !segments.is_empty() {
@@ -55,7 +58,7 @@ impl<'lua> TableImport<'lua> for Table<'lua> {
 
         match segments.last() {
             Some(seg) => module.get::<_, R>(*seg),
-            None => Err(Error::runtime(format!("module not found: {}", path.as_ref())))
+            None => Err(Error::runtime(format!("module not found: {:?}", path.as_ref())))
         }
     }
 
