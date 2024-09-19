@@ -3,8 +3,11 @@ use std::path::Path;
 use mlua::{FromLuaMulti, IntoLua, IntoLuaMulti, Lua, Table};
 
 pub mod require;
+pub mod typed;
 mod error;
 mod macros;
+
+pub use mlua_extras_derive::UserData;
 
 pub use error::{Report, Result};
 
