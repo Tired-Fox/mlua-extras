@@ -1,7 +1,6 @@
 use mlua::{FromLua, Lua, MetaMethod, UserDataMethods, Value};
 use mlua_extras::{
-    require::Import,
-    typed::{Type, Typed as _, TypedDataFields, TypedDataMethods, TypedFunction, TypedUserData},
+    typed::{generator::Definitions, Type, TypedDataFields, TypedDataMethods, TypedFunction, TypedUserData},
     LuaExtras, Typed, UserData,
 };
 
@@ -124,33 +123,43 @@ fn main() -> mlua::Result<()> {
     println!();
 
     // Example of parsing `Example` as a class
-    if let Type::Class(name, gen) = Type::class::<Example>("Example") {
-        print!("\x1b[38;2;128;128;128m");
-        for doc in gen.type_doc.iter() {
-            println!("--- {}", doc.split('\n').collect::<Vec<_>>().join("\n---"));
-        }
-        println!("--- \x1b[36m@class\x1b[33m {name}\x1b[33m\x1b[38;2;128;128;128m");
-        for (name, field) in gen.fields.iter() {
-            for doc in field.docs.iter() {
-                println!("--- {}", doc.split('\n').collect::<Vec<_>>().join("\n---"));
-            }
-            println!("--- \x1b[36m@field\x1b[38;2;128;128;128m {name} \x1b[33m{}\x1b[38;2;128;128;128m", field.ty.as_ref());
-        }
+    //if let Type::Class(name, gen) = Type::class::<Example>("Example") {
+    //    print!("\x1b[38;2;128;128;128m");
+    //    for doc in gen.type_doc.iter() {
+    //        println!("--- {}", doc.split('\n').collect::<Vec<_>>().join("\n---"));
+    //    }
+    //    println!("--- \x1b[36m@class\x1b[33m {name}\x1b[33m\x1b[38;2;128;128;128m");
+    //    for (name, field) in gen.fields.iter() {
+    //        for doc in field.docs.iter() {
+    //            println!("--- {}", doc.split('\n').collect::<Vec<_>>().join("\n---"));
+    //        }
+    //        println!("--- \x1b[36m@field\x1b[38;2;128;128;128m {name} \x1b[33m{}\x1b[38;2;128;128;128m", field.ty.as_ref());
+    //    }
+    //
+    //    for (name, method) in gen.methods.iter() {
+    //        for doc in method.docs.iter() {
+    //            println!("--- {}", doc.split('\n').collect::<Vec<_>>().join("\n---"));
+    //        }
+    //        println!("--- \x1b[36m@field \x1b[38;2;128;128;128m{name} \x1b[35mfun\x1b[39m(\x1b[31mself\x1b[39m{})\x1b[38;2;128;128;128m",
+    //            method.params
+    //                .iter()
+    //                .enumerate()
+    //                .map(|(i, p)| p.name.as_ref().map(|v| v.to_string()).unwrap_or(format!("param{i}")))
+    //                .collect::<Vec<_>>()
+    //                .join(", ")
+    //        );
+    //    }
+    //    print!("\x1b[0m");
+    //}
 
-        for (name, method) in gen.methods.iter() {
-            for doc in method.docs.iter() {
-                println!("--- {}", doc.split('\n').collect::<Vec<_>>().join("\n---"));
-            }
-            println!("--- \x1b[36m@field \x1b[38;2;128;128;128m{name} \x1b[35mfun\x1b[39m(\x1b[31mself\x1b[39m{})\x1b[38;2;128;128;128m",
-                method.params
-                    .iter()
-                    .enumerate()
-                    .map(|(i, p)| p.name.as_ref().map(|v| v.to_string()).unwrap_or(format!("param{i}")))
-                    .collect::<Vec<_>>()
-                    .join(", ")
-            );
-        }
-        print!("\x1b[0m");
+    let definitions = Definitions::generate("init")
+        .register_alias("options", Type::single("\"literal\""))
+        .register_class::<Example>("Example")
+        .register_module::<Example>("example")
+        .finish();
+
+    for definition in definitions.iter() {
+        println!("{definition:?}");
     }
 
     Ok(())

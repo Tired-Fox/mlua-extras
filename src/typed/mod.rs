@@ -1,6 +1,14 @@
-use std::{borrow::Cow, collections::BTreeMap, marker::PhantomData};
+mod function;
+pub mod generator;
 
-use mlua::{AnyUserData, FromLua, FromLuaMulti, Function, IntoLua, IntoLuaMulti, Lua, MetaMethod, UserData, UserDataFields, UserDataMethods, Value};
+use std::{borrow::Cow, collections::BTreeMap};
+
+pub use function::{Param, TypedFunction};
+
+use mlua::{
+    AnyUserData, FromLua, FromLuaMulti, IntoLua, IntoLuaMulti, Lua, MetaMethod, UserData,
+    UserDataFields, UserDataMethods,
+};
 
 #[cfg(feature = "send")]
 ///used by the `mlua_send` feature
@@ -22,7 +30,7 @@ pub trait Typed {
     fn as_param() -> Param {
         Param {
             name: None,
-            ty: Self::ty()
+            ty: Self::ty(),
         }
     }
 }
@@ -38,7 +46,7 @@ macro_rules! impl_static_typed {
             $(
                 impl Typed for $target {
                     fn ty() -> Type {
-                        Type::Single($name.into())  
+                        Type::Single($name.into())
                     }
                 }
             )*
@@ -57,7 +65,7 @@ macro_rules! impl_static_typed_generic {
             $(
                 impl<$($lt,)+> Typed for $target {
                     fn ty() -> Type {
-                        Type::Single($name.into())  
+                        Type::Single($name.into())
                     }
                 }
             )*
@@ -221,12 +229,12 @@ pub trait TypedDataFields<'lua, T> {
 
     /// Typed version of [add_field_method_get](mlua::UserDataFields::add_field_method_get) and [add_field_method_set](mlua::UserDataFields::add_field_method_set) combined
     fn add_field_method_get_set<S, R, A, GET, SET>(&mut self, name: &S, get: GET, set: SET)
-        where
-            S: AsRef<str> + ?Sized,
-            R: IntoLua<'lua> + Typed,
-            A: FromLua<'lua> + Typed,
-            GET: 'static + MaybeSend + Fn(&'lua Lua, &T) -> mlua::Result<R>,
-            SET: 'static + MaybeSend + Fn(&'lua Lua, &mut T, A) -> mlua::Result<()>;
+    where
+        S: AsRef<str> + ?Sized,
+        R: IntoLua<'lua> + Typed,
+        A: FromLua<'lua> + Typed,
+        GET: 'static + MaybeSend + Fn(&'lua Lua, &T) -> mlua::Result<R>,
+        SET: 'static + MaybeSend + Fn(&'lua Lua, &mut T, A) -> mlua::Result<()>;
 
     /// Typed version of [add_field_function_get](mlua::UserDataFields::add_field_function_get)
     fn add_field_function_get<S, R, F>(&mut self, name: &S, function: F)
@@ -258,7 +266,7 @@ pub trait TypedDataFields<'lua, T> {
         R: IntoLua<'lua> + Typed;
 }
 
-#[derive(Debug, Clone, PartialEq, strum::AsRefStr)]
+#[derive(Debug, Clone, PartialEq, strum::AsRefStr, PartialOrd, Eq, Ord)]
 pub enum Type {
     Single(Cow<'static, str>),
     Alias(Cow<'static, str>, Box<Type>),
@@ -271,9 +279,10 @@ pub enum Type {
     Array(Vec<Type>),
     Map(Box<Type>, Box<Type>),
     Function {
+        name: Option<Cow<'static, str>>,
         params: Vec<Param>,
         returns: Vec<Type>,
-    }
+    },
 }
 
 impl std::ops::BitOr for Type {
@@ -288,17 +297,19 @@ impl std::ops::BitOr for Type {
                     }
                 }
                 Self::Union(types)
-            },
+            }
             (Self::Union(mut types), other) => {
                 if !types.contains(&other) {
                     types.push(other)
                 }
                 Self::Union(types)
-            },
-            (current, other) => if current == other {
-                current
-            } else {
-                Self::Union(Vec::from([current, other]))
+            }
+            (current, other) => {
+                if current == other {
+                    current
+                } else {
+                    Self::Union(Vec::from([current, other]))
+                }
             }
         }
     }
@@ -317,16 +328,16 @@ impl Type {
         Self::Variadic(Box::new(ty))
     }
 
-    pub fn array(types: impl IntoIterator<Item=Type>) -> Self {
-       Self::Array(types.into_iter().collect()) 
+    pub fn array(types: impl IntoIterator<Item = Type>) -> Self {
+        Self::Array(types.into_iter().collect())
     }
 
-    pub fn union(types: impl IntoIterator<Item=Type>) -> Self {
-       Self::Union(types.into_iter().collect()) 
+    pub fn union(types: impl IntoIterator<Item = Type>) -> Self {
+        Self::Union(types.into_iter().collect())
     }
 
-    pub fn tuple(types: impl IntoIterator<Item=Type>) -> Self {
-       Self::Tuple(types.into_iter().collect()) 
+    pub fn tuple(types: impl IntoIterator<Item = Type>) -> Self {
+        Self::Tuple(types.into_iter().collect())
     }
 
     pub fn class<T: TypedUserData>(name: impl Into<Cow<'static, str>>) -> Self {
@@ -335,6 +346,14 @@ impl Type {
 
     pub fn module<T: TypedUserData>(name: impl Into<Cow<'static, str>>) -> Self {
         Self::Module(name.into(), Box::new(TypeGenerator::new::<T>()))
+    }
+
+    pub fn function<Params: TypedMultiValue, Response: TypedMultiValue>(name: impl Into<Cow<'static, str>>, _: TypedFunction<Params, Response>) -> Self {
+        Self::Function{
+            name: Some(name.into()),
+            params: Params::get_types_as_params(),
+            returns: Response::get_types()
+        }
     }
 }
 
@@ -363,38 +382,14 @@ impl From<String> for Type {
     }
 }
 
-impl<I: Into<Type>, const N: usize> From<[I;N]> for Type {
-    fn from(value: [I;N]) -> Self {
+impl<I: Into<Type>, const N: usize> From<[I; N]> for Type {
+    fn from(value: [I; N]) -> Self {
         Type::Array(value.into_iter().map(|v| v.into()).collect::<Vec<_>>())
     }
 }
 impl<I: Into<Type>> From<Vec<I>> for Type {
     fn from(value: Vec<I>) -> Self {
         Type::Array(value.into_iter().map(|v| v.into()).collect::<Vec<_>>())
-    }
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub struct Param {
-    ///If the parameter has a name (will default to Param{number} if None)
-    pub name: Option<Cow<'static, str>>,
-    ///The type of the parameter
-    pub ty: Type,
-}
-impl<I: Into<Cow<'static, str>>> From<(I, Type)> for Param {
-    fn from((name, ty): (I, Type)) -> Self {
-        Param {
-            name: Some(name.into()),
-            ty
-        }
-    }
-}
-impl From<Type> for Param {
-    fn from(value: Type) -> Self {
-        Param {
-            name: None,
-            ty: value
-        }
     }
 }
 
@@ -406,7 +401,10 @@ pub trait TypedMultiValue {
     fn get_types_as_params() -> Vec<Param> {
         Self::get_types()
             .iter()
-            .map(|v| Param { name: None, ty: v.clone() })
+            .map(|v| Param {
+                name: None,
+                ty: v.clone(),
+            })
             .collect::<Vec<_>>()
     }
 }
@@ -441,7 +439,7 @@ where
     A: Typed,
 {
     fn get_types() -> Vec<Type> {
-       Vec::from([A::ty()]) 
+        Vec::from([A::ty()])
     }
 }
 
@@ -463,74 +461,7 @@ impl_typed_multi_value!(A B);
 impl_typed_multi_value!(A);
 impl_typed_multi_value!();
 
-
-pub struct TypedFunction<'lua, Params, Response>
-where
-    Params: TypedMultiValue,
-    Response: TypedMultiValue,
-{
-    inner: Function<'lua>,
-    _p: PhantomData<Params>,
-    _r: PhantomData<Response>
-}
-
-impl<'lua, Params, Response> TypedFunction<'lua, Params, Response>
-where
-    Params: TypedMultiValue + IntoLuaMulti<'lua>,
-    Response: TypedMultiValue + FromLuaMulti<'lua>,
-{
-    /// Same as [rlua::Function::call](rlua::Function#method.call) but with the param and return
-    /// types already specified
-    pub fn call(&self, params: Params) -> mlua::Result<Response> {
-        self.inner.call::<Params, Response>(params)
-    }
-
-    /// Same as [rlua::Function::call](rlua::Function#method.call) but with the param and return
-    /// types already specified
-    ///
-    /// # Safety
-    ///
-    /// Panics if any lua errors occur
-    pub unsafe fn call_unsafe(&self, params: Params) -> Response {
-        self.inner.call::<Params, Response>(params).unwrap()
-    }
-}
-
-impl<'lua, Params, Response> FromLua<'lua> for TypedFunction<'lua, Params, Response>
-where
-    Params: TypedMultiValue,
-    Response: TypedMultiValue,
-{
-    fn from_lua(value: Value<'lua>, lua: &'lua Lua) -> mlua::prelude::LuaResult<Self> {
-        Ok(Self {
-            inner: FromLua::from_lua(value, lua)?,
-            _p: PhantomData,
-            _r: PhantomData,
-        })
-    }
-}
-
-impl<'lua, Params, Response> IntoLua<'lua> for TypedFunction<'lua, Params, Response>
-where
-    Params: TypedMultiValue,
-    Response: TypedMultiValue,
-{
-    fn into_lua(self, _lua: &'lua Lua) -> mlua::prelude::LuaResult<Value<'lua>> {
-        Ok(Value::Function(self.inner))
-    }
-}
-
-impl<'lua, Params, Response> Typed for TypedFunction<'lua, Params, Response>
-where
-    Params: TypedMultiValue,
-    Response: TypedMultiValue,
-{
-    fn ty() -> Type {
-        Type::Function { params: Params::get_types_as_params(), returns: Response::get_types() }
-    }
-}
-
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, PartialOrd, Eq, Ord)]
 pub struct Field {
     pub name: Cow<'static, str>,
     pub ty: Type,
@@ -538,7 +469,7 @@ pub struct Field {
     pub docs: Vec<String>,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Fun {
     pub name: Cow<'static, str>,
     pub params: Vec<Param>,
@@ -547,7 +478,7 @@ pub struct Fun {
     pub docs: Vec<String>,
 }
 
-#[derive(Default, Debug, Clone, PartialEq)]
+#[derive(Default, Debug, Clone, PartialEq, PartialOrd, Eq, Ord)]
 pub struct TypeGenerator {
     // PERF: Is it worth embedding luals annotation syntax?
     pub type_doc: Vec<String>,
@@ -586,11 +517,12 @@ impl<'lua, T: TypedUserData> TypedDataFields<'lua, T> for TypeGenerator {
     }
 
     fn add_field<V>(&mut self, name: impl AsRef<str>, _: V)
-        where
-            V: IntoLua<'lua> + Clone + 'static + Typed {
-
+    where
+        V: IntoLua<'lua> + Clone + 'static + Typed,
+    {
         let name: Cow<'static, str> = name.as_ref().to_string().into();
-        self.static_fields.entry(name.clone())
+        self.static_fields
+            .entry(name.clone())
             .and_modify(|v| {
                 v.docs.append(&mut self.queued_docs);
                 v.ty = v.ty.clone() | V::ty();
@@ -598,18 +530,19 @@ impl<'lua, T: TypedUserData> TypedDataFields<'lua, T> for TypeGenerator {
             .or_insert(Field {
                 name,
                 ty: V::ty(),
-                docs: self.queued_docs.drain(..).collect::<Vec<_>>()
+                docs: self.queued_docs.drain(..).collect::<Vec<_>>(),
             });
     }
 
     fn add_field_function_set<S, A, F>(&mut self, name: &S, _: F)
-        where
-            S: AsRef<str> + ?Sized,
-            A: FromLua<'lua> + Typed,
-            F: 'static + MaybeSend + FnMut(&'lua Lua, AnyUserData<'lua>, A) -> mlua::Result<()> {
-
+    where
+        S: AsRef<str> + ?Sized,
+        A: FromLua<'lua> + Typed,
+        F: 'static + MaybeSend + FnMut(&'lua Lua, AnyUserData<'lua>, A) -> mlua::Result<()>,
+    {
         let name: Cow<'static, str> = name.as_ref().to_string().into();
-        self.static_fields.entry(name.clone())
+        self.static_fields
+            .entry(name.clone())
             .and_modify(|v| {
                 v.docs.append(&mut self.queued_docs);
                 v.ty = v.ty.clone() | A::ty();
@@ -617,18 +550,19 @@ impl<'lua, T: TypedUserData> TypedDataFields<'lua, T> for TypeGenerator {
             .or_insert(Field {
                 name,
                 ty: A::ty(),
-                docs: self.queued_docs.drain(..).collect::<Vec<_>>()
+                docs: self.queued_docs.drain(..).collect::<Vec<_>>(),
             });
     }
 
     fn add_field_function_get<S, R, F>(&mut self, name: &S, _: F)
-        where
-            S: AsRef<str> + ?Sized,
-            R: IntoLua<'lua> + Typed,
-            F: 'static + MaybeSend + Fn(&'lua Lua, AnyUserData<'lua>) -> mlua::Result<R> {
-
+    where
+        S: AsRef<str> + ?Sized,
+        R: IntoLua<'lua> + Typed,
+        F: 'static + MaybeSend + Fn(&'lua Lua, AnyUserData<'lua>) -> mlua::Result<R>,
+    {
         let name: Cow<'static, str> = name.as_ref().to_string().into();
-        self.static_fields.entry(name.clone())
+        self.static_fields
+            .entry(name.clone())
             .and_modify(|v| {
                 v.docs.append(&mut self.queued_docs);
                 v.ty = v.ty.clone() | R::ty();
@@ -636,20 +570,21 @@ impl<'lua, T: TypedUserData> TypedDataFields<'lua, T> for TypeGenerator {
             .or_insert(Field {
                 name,
                 ty: R::ty(),
-                docs: self.queued_docs.drain(..).collect::<Vec<_>>()
+                docs: self.queued_docs.drain(..).collect::<Vec<_>>(),
             });
     }
 
     fn add_field_function_get_set<S, R, A, GET, SET>(&mut self, name: &S, _: GET, _: SET)
-        where
-            S: AsRef<str> + ?Sized,
-            R: IntoLua<'lua> + Typed,
-            A: FromLua<'lua> + Typed,
-            GET: 'static + MaybeSend + Fn(&'lua Lua, AnyUserData<'lua>) -> mlua::Result<R>,
-            SET: 'static + MaybeSend + Fn(&'lua Lua, AnyUserData<'lua>, A) -> mlua::Result<()> {
-        
+    where
+        S: AsRef<str> + ?Sized,
+        R: IntoLua<'lua> + Typed,
+        A: FromLua<'lua> + Typed,
+        GET: 'static + MaybeSend + Fn(&'lua Lua, AnyUserData<'lua>) -> mlua::Result<R>,
+        SET: 'static + MaybeSend + Fn(&'lua Lua, AnyUserData<'lua>, A) -> mlua::Result<()>,
+    {
         let name: Cow<'static, str> = name.as_ref().to_string().into();
-        self.static_fields.entry(name.clone())
+        self.static_fields
+            .entry(name.clone())
             .and_modify(|v| {
                 v.docs.append(&mut self.queued_docs);
                 v.ty = v.ty.clone() | A::ty() | R::ty();
@@ -657,18 +592,19 @@ impl<'lua, T: TypedUserData> TypedDataFields<'lua, T> for TypeGenerator {
             .or_insert(Field {
                 name,
                 ty: A::ty() | R::ty(),
-                docs: self.queued_docs.drain(..).collect::<Vec<_>>()
+                docs: self.queued_docs.drain(..).collect::<Vec<_>>(),
             });
     }
 
     fn add_field_method_set<S, A, M>(&mut self, name: &S, _: M)
-        where
-            S: AsRef<str> + ?Sized,
-            A: FromLua<'lua> + Typed,
-            M: 'static + MaybeSend + FnMut(&'lua Lua, &mut T, A) -> mlua::Result<()> {
-
+    where
+        S: AsRef<str> + ?Sized,
+        A: FromLua<'lua> + Typed,
+        M: 'static + MaybeSend + FnMut(&'lua Lua, &mut T, A) -> mlua::Result<()>,
+    {
         let name: Cow<'static, str> = name.as_ref().to_string().into();
-        self.fields.entry(name.clone())
+        self.fields
+            .entry(name.clone())
             .and_modify(|v| {
                 v.docs.append(&mut self.queued_docs);
                 v.ty = v.ty.clone() | A::ty();
@@ -676,18 +612,19 @@ impl<'lua, T: TypedUserData> TypedDataFields<'lua, T> for TypeGenerator {
             .or_insert(Field {
                 name,
                 ty: A::ty(),
-                docs: self.queued_docs.drain(..).collect::<Vec<_>>()
+                docs: self.queued_docs.drain(..).collect::<Vec<_>>(),
             });
     }
 
     fn add_field_method_get<S, R, M>(&mut self, name: &S, _: M)
-        where
-            S: AsRef<str> + ?Sized,
-            R: IntoLua<'lua> + Typed,
-            M: 'static + MaybeSend + Fn(&'lua Lua, &T) -> mlua::Result<R> {
-
+    where
+        S: AsRef<str> + ?Sized,
+        R: IntoLua<'lua> + Typed,
+        M: 'static + MaybeSend + Fn(&'lua Lua, &T) -> mlua::Result<R>,
+    {
         let name: Cow<'static, str> = name.as_ref().to_string().into();
-        self.fields.entry(name.clone())
+        self.fields
+            .entry(name.clone())
             .and_modify(|v| {
                 v.docs.append(&mut self.queued_docs);
                 v.ty = v.ty.clone() | R::ty();
@@ -695,20 +632,21 @@ impl<'lua, T: TypedUserData> TypedDataFields<'lua, T> for TypeGenerator {
             .or_insert(Field {
                 name,
                 ty: R::ty(),
-                docs: self.queued_docs.drain(..).collect::<Vec<_>>()
+                docs: self.queued_docs.drain(..).collect::<Vec<_>>(),
             });
     }
 
     fn add_field_method_get_set<S, R, A, GET, SET>(&mut self, name: &S, _: GET, _: SET)
-            where
-                S: AsRef<str> + ?Sized,
-                R: IntoLua<'lua> + Typed,
-                A: FromLua<'lua> + Typed,
-                GET: 'static + MaybeSend + Fn(&'lua Lua, &T) -> mlua::Result<R>,
-                SET: 'static + MaybeSend + Fn(&'lua Lua, &mut T, A) -> mlua::Result<()> {
-        
+    where
+        S: AsRef<str> + ?Sized,
+        R: IntoLua<'lua> + Typed,
+        A: FromLua<'lua> + Typed,
+        GET: 'static + MaybeSend + Fn(&'lua Lua, &T) -> mlua::Result<R>,
+        SET: 'static + MaybeSend + Fn(&'lua Lua, &mut T, A) -> mlua::Result<()>,
+    {
         let name: Cow<'static, str> = name.as_ref().to_string().into();
-        self.fields.entry(name.clone())
+        self.fields
+            .entry(name.clone())
             .and_modify(|v| {
                 v.docs.append(&mut self.queued_docs);
                 v.ty = v.ty.clone() | A::ty() | R::ty();
@@ -716,18 +654,18 @@ impl<'lua, T: TypedUserData> TypedDataFields<'lua, T> for TypeGenerator {
             .or_insert(Field {
                 name,
                 ty: A::ty() | R::ty(),
-                docs: self.queued_docs.drain(..).collect::<Vec<_>>()
+                docs: self.queued_docs.drain(..).collect::<Vec<_>>(),
             });
     }
 
     fn add_meta_field_with<R, F>(&mut self, meta: MetaMethod, _: F)
-        where
-            F: 'static + MaybeSend + Fn(&'lua Lua) -> mlua::Result<R>,
-            R: IntoLua<'lua> + Typed
+    where
+        F: 'static + MaybeSend + Fn(&'lua Lua) -> mlua::Result<R>,
+        R: IntoLua<'lua> + Typed,
     {
-
         let name: Cow<'static, str> = meta.as_ref().to_string().into();
-        self.meta_fields.entry(name.clone())
+        self.meta_fields
+            .entry(name.clone())
             .and_modify(|v| {
                 v.docs.append(&mut self.queued_docs);
                 v.ty = v.ty.clone() | R::ty();
@@ -735,7 +673,7 @@ impl<'lua, T: TypedUserData> TypedDataFields<'lua, T> for TypeGenerator {
             .or_insert(Field {
                 name,
                 ty: R::ty(),
-                docs: self.queued_docs.drain(..).collect::<Vec<_>>()
+                docs: self.queued_docs.drain(..).collect::<Vec<_>>(),
             });
     }
 }
@@ -747,164 +685,194 @@ impl<'lua, T: TypedUserData> TypedDataMethods<'lua, T> for TypeGenerator {
     }
 
     fn add_method<S, A, R, M>(&mut self, name: &S, _: M)
-        where
-            S: ?Sized + AsRef<str>,
-            A: FromLuaMulti<'lua> + TypedMultiValue,
-            R: IntoLuaMulti<'lua> + TypedMultiValue,
-            M: 'static + MaybeSend + Fn(&'lua Lua, &T, A) -> mlua::Result<R> {
-
+    where
+        S: ?Sized + AsRef<str>,
+        A: FromLuaMulti<'lua> + TypedMultiValue,
+        R: IntoLuaMulti<'lua> + TypedMultiValue,
+        M: 'static + MaybeSend + Fn(&'lua Lua, &T, A) -> mlua::Result<R>,
+    {
         let name: Cow<'static, str> = name.as_ref().to_string().into();
-        self.methods.insert(name.clone(), Fun {
-            name,
-            params: A::get_types_as_params(),
-            returns: R::get_types(),
-            docs: self.queued_docs.drain(..).collect::<Vec<_>>()
-        });
-    }
-
-    fn add_function<S, A, R, F>(&mut self, name: &S, _: F)
-        where
-            S: ?Sized + AsRef<str>,
-            A: FromLuaMulti<'lua> + TypedMultiValue,
-            R: IntoLuaMulti<'lua> + TypedMultiValue,
-            F: 'static + MaybeSend + Fn(&'lua Lua, A) -> mlua::Result<R> {
-
-        let name: Cow<'static, str> = name.as_ref().to_string().into();
-        self.functions.insert(name.clone(), Fun {
+        self.methods.insert(
+            name.clone(),
+            Fun {
                 name,
                 params: A::get_types_as_params(),
                 returns: R::get_types(),
-                docs: self.queued_docs.drain(..).collect::<Vec<_>>()
-            });
+                docs: self.queued_docs.drain(..).collect::<Vec<_>>(),
+            },
+        );
+    }
+
+    fn add_function<S, A, R, F>(&mut self, name: &S, _: F)
+    where
+        S: ?Sized + AsRef<str>,
+        A: FromLuaMulti<'lua> + TypedMultiValue,
+        R: IntoLuaMulti<'lua> + TypedMultiValue,
+        F: 'static + MaybeSend + Fn(&'lua Lua, A) -> mlua::Result<R>,
+    {
+        let name: Cow<'static, str> = name.as_ref().to_string().into();
+        self.functions.insert(
+            name.clone(),
+            Fun {
+                name,
+                params: A::get_types_as_params(),
+                returns: R::get_types(),
+                docs: self.queued_docs.drain(..).collect::<Vec<_>>(),
+            },
+        );
     }
 
     fn add_method_mut<S, A, R, M>(&mut self, name: &S, _: M)
-        where
-            S: ?Sized + AsRef<str>,
-            A: FromLuaMulti<'lua> + TypedMultiValue,
-            R: IntoLuaMulti<'lua> + TypedMultiValue,
-            M: 'static + MaybeSend + FnMut(&'lua Lua, &mut T, A) -> mlua::Result<R> {
-
+    where
+        S: ?Sized + AsRef<str>,
+        A: FromLuaMulti<'lua> + TypedMultiValue,
+        R: IntoLuaMulti<'lua> + TypedMultiValue,
+        M: 'static + MaybeSend + FnMut(&'lua Lua, &mut T, A) -> mlua::Result<R>,
+    {
         let name: Cow<'static, str> = name.as_ref().to_string().into();
-        self.methods.insert(name.clone(), Fun {
-            name,
-            params: A::get_types_as_params(),
-            returns: R::get_types(),
-            docs: self.queued_docs.drain(..).collect::<Vec<_>>()
-        });
+        self.methods.insert(
+            name.clone(),
+            Fun {
+                name,
+                params: A::get_types_as_params(),
+                returns: R::get_types(),
+                docs: self.queued_docs.drain(..).collect::<Vec<_>>(),
+            },
+        );
     }
 
     fn add_meta_method<A, R, M>(&mut self, meta: MetaMethod, _: M)
-        where
-            A: FromLuaMulti<'lua> + TypedMultiValue,
-            R: IntoLuaMulti<'lua> + TypedMultiValue,
-            M: 'static + MaybeSend + Fn(&'lua Lua, &T, A) -> mlua::Result<R> {
-
+    where
+        A: FromLuaMulti<'lua> + TypedMultiValue,
+        R: IntoLuaMulti<'lua> + TypedMultiValue,
+        M: 'static + MaybeSend + Fn(&'lua Lua, &T, A) -> mlua::Result<R>,
+    {
         let name: Cow<'static, str> = meta.as_ref().to_string().into();
-        self.meta_methods.insert(name.clone(), Fun {
-            name,
-            params: A::get_types_as_params(),
-            returns: R::get_types(),
-            docs: self.queued_docs.drain(..).collect::<Vec<_>>()
-        });
+        self.meta_methods.insert(
+            name.clone(),
+            Fun {
+                name,
+                params: A::get_types_as_params(),
+                returns: R::get_types(),
+                docs: self.queued_docs.drain(..).collect::<Vec<_>>(),
+            },
+        );
     }
 
-    #[cfg(feature="async")]
+    #[cfg(feature = "async")]
     fn add_async_method<'s, S: ?Sized + AsRef<str>, A, R, M, MR>(&mut self, name: &S, _: M)
-        where
-            'lua: 's,
-            T: 'static,
-            M: Fn(&'lua Lua, &'s T, A) -> MR + MaybeSend + 'static,
-            A: FromLuaMulti<'lua> + TypedMultiValue,
-            MR: std::future::Future<Output = mlua::Result<R>> + 's,
-            R: IntoLuaMulti<'lua> + TypedMultiValue {
-
+    where
+        'lua: 's,
+        T: 'static,
+        M: Fn(&'lua Lua, &'s T, A) -> MR + MaybeSend + 'static,
+        A: FromLuaMulti<'lua> + TypedMultiValue,
+        MR: std::future::Future<Output = mlua::Result<R>> + 's,
+        R: IntoLuaMulti<'lua> + TypedMultiValue,
+    {
         let name: Cow<'static, str> = name.as_ref().to_string().into();
-        self.methods.insert(name.clone(), Fun {
-            name,
-            params: A::get_types_as_params(),
-            returns: R::get_types(),
-            docs: self.queued_docs.drain(..).collect::<Vec<_>>()
-        });
+        self.methods.insert(
+            name.clone(),
+            Fun {
+                name,
+                params: A::get_types_as_params(),
+                returns: R::get_types(),
+                docs: self.queued_docs.drain(..).collect::<Vec<_>>(),
+            },
+        );
     }
 
     fn add_function_mut<S, A, R, F>(&mut self, name: &S, _: F)
-        where
-            S: ?Sized + AsRef<str>,
-            A: FromLuaMulti<'lua> + TypedMultiValue,
-            R: IntoLuaMulti<'lua> + TypedMultiValue,
-            F: 'static + MaybeSend + FnMut(&'lua Lua, A) -> mlua::Result<R> {
-
+    where
+        S: ?Sized + AsRef<str>,
+        A: FromLuaMulti<'lua> + TypedMultiValue,
+        R: IntoLuaMulti<'lua> + TypedMultiValue,
+        F: 'static + MaybeSend + FnMut(&'lua Lua, A) -> mlua::Result<R>,
+    {
         let name: Cow<'static, str> = name.as_ref().to_string().into();
-        self.functions.insert(name.clone(), Fun {
-            name,
-            params: A::get_types_as_params(),
-            returns: R::get_types(),
-            docs: self.queued_docs.drain(..).collect::<Vec<_>>()
-        });
+        self.functions.insert(
+            name.clone(),
+            Fun {
+                name,
+                params: A::get_types_as_params(),
+                returns: R::get_types(),
+                docs: self.queued_docs.drain(..).collect::<Vec<_>>(),
+            },
+        );
     }
 
     fn add_meta_function<A, R, F>(&mut self, meta: MetaMethod, _: F)
-        where
-            A: FromLuaMulti<'lua> + TypedMultiValue,
-            R: IntoLuaMulti<'lua> + TypedMultiValue,
-            F: 'static + MaybeSend + Fn(&'lua Lua, A) -> mlua::Result<R> {
-
+    where
+        A: FromLuaMulti<'lua> + TypedMultiValue,
+        R: IntoLuaMulti<'lua> + TypedMultiValue,
+        F: 'static + MaybeSend + Fn(&'lua Lua, A) -> mlua::Result<R>,
+    {
         let name: Cow<'static, str> = meta.as_ref().to_string().into();
-        self.meta_functions.insert(name.clone(), Fun {
-            name,
-            params: A::get_types_as_params(),
-            returns: R::get_types(),
-            docs: self.queued_docs.drain(..).collect::<Vec<_>>()
-        });
+        self.meta_functions.insert(
+            name.clone(),
+            Fun {
+                name,
+                params: A::get_types_as_params(),
+                returns: R::get_types(),
+                docs: self.queued_docs.drain(..).collect::<Vec<_>>(),
+            },
+        );
     }
 
-    #[cfg(feature="async")]
+    #[cfg(feature = "async")]
     fn add_async_function<S: ?Sized, A, R, F, FR>(&mut self, name: &S, _: F)
-        where
-            S: AsRef<str>,
-            A: FromLuaMulti<'lua> + TypedMultiValue,
-            R: IntoLuaMulti<'lua> + TypedMultiValue,
-            F: 'static + MaybeSend + Fn(&'lua Lua, A) -> FR,
-            FR: 'lua + std::future::Future<Output = mlua::Result<R>> {
-
+    where
+        S: AsRef<str>,
+        A: FromLuaMulti<'lua> + TypedMultiValue,
+        R: IntoLuaMulti<'lua> + TypedMultiValue,
+        F: 'static + MaybeSend + Fn(&'lua Lua, A) -> FR,
+        FR: 'lua + std::future::Future<Output = mlua::Result<R>>,
+    {
         let name: Cow<'static, str> = name.as_ref().to_string().into();
-        self.functions.insert(name.clone(), Fun {
-            name,
-            params: A::get_types_as_params(),
-            returns: R::get_types(),
-            docs: self.queued_docs.drain(..).collect::<Vec<_>>()
-        });
+        self.functions.insert(
+            name.clone(),
+            Fun {
+                name,
+                params: A::get_types_as_params(),
+                returns: R::get_types(),
+                docs: self.queued_docs.drain(..).collect::<Vec<_>>(),
+            },
+        );
     }
 
     fn add_meta_method_mut<A, R, M>(&mut self, meta: MetaMethod, _: M)
-        where
-            A: FromLuaMulti<'lua> + TypedMultiValue,
-            R: IntoLuaMulti<'lua> + TypedMultiValue,
-            M: 'static + MaybeSend + FnMut(&'lua Lua, &mut T, A) -> mlua::Result<R> {
-
+    where
+        A: FromLuaMulti<'lua> + TypedMultiValue,
+        R: IntoLuaMulti<'lua> + TypedMultiValue,
+        M: 'static + MaybeSend + FnMut(&'lua Lua, &mut T, A) -> mlua::Result<R>,
+    {
         let name: Cow<'static, str> = meta.as_ref().to_string().into();
-        self.meta_methods.insert(name.clone(), Fun {
-            name,
-            params: A::get_types_as_params(),
-            returns: R::get_types(),
-            docs: self.queued_docs.drain(..).collect::<Vec<_>>()
-        });
+        self.meta_methods.insert(
+            name.clone(),
+            Fun {
+                name,
+                params: A::get_types_as_params(),
+                returns: R::get_types(),
+                docs: self.queued_docs.drain(..).collect::<Vec<_>>(),
+            },
+        );
     }
 
     fn add_meta_function_mut<A, R, F>(&mut self, meta: MetaMethod, _: F)
-        where
-            A: FromLuaMulti<'lua> + TypedMultiValue,
-            R: IntoLuaMulti<'lua> + TypedMultiValue,
-            F: 'static + MaybeSend + FnMut(&'lua Lua, A) -> mlua::Result<R> {
-
+    where
+        A: FromLuaMulti<'lua> + TypedMultiValue,
+        R: IntoLuaMulti<'lua> + TypedMultiValue,
+        F: 'static + MaybeSend + FnMut(&'lua Lua, A) -> mlua::Result<R>,
+    {
         let name: Cow<'static, str> = meta.as_ref().to_string().into();
-        self.meta_functions.insert(name.clone(), Fun {
-            name,
-            params: A::get_types_as_params(),
-            returns: R::get_types(),
-            docs: self.queued_docs.drain(..).collect::<Vec<_>>()
-        });
+        self.meta_functions.insert(
+            name.clone(),
+            Fun {
+                name,
+                params: A::get_types_as_params(),
+                returns: R::get_types(),
+                docs: self.queued_docs.drain(..).collect::<Vec<_>>(),
+            },
+        );
     }
 }
 
@@ -915,170 +883,194 @@ impl<'ctx, U> WrappedGenerator<'ctx, U> {
     }
 }
 
-impl<'lua, 'ctx, T: UserData, U: UserDataFields<'lua, T>> TypedDataFields<'lua, T> for WrappedGenerator<'ctx, U> {
-    fn document(&mut self, _doc: &str) -> &mut Self { self }
+impl<'lua, 'ctx, T: UserData, U: UserDataFields<'lua, T>> TypedDataFields<'lua, T>
+    for WrappedGenerator<'ctx, U>
+{
+    fn document(&mut self, _doc: &str) -> &mut Self {
+        self
+    }
 
     fn add_field<V>(&mut self, name: impl AsRef<str>, value: V)
-        where
-            V: IntoLua<'lua> + Clone + 'static + Typed {
-        self.0.add_field(name, value)    
+    where
+        V: IntoLua<'lua> + Clone + 'static + Typed,
+    {
+        self.0.add_field(name, value)
     }
 
     fn add_field_function_set<S, A, F>(&mut self, name: &S, function: F)
-        where
-            S: AsRef<str> + ?Sized,
-            A: FromLua<'lua> + Typed,
-            F: 'static + MaybeSend + FnMut(&'lua Lua, AnyUserData<'lua>, A) -> mlua::Result<()> {
+    where
+        S: AsRef<str> + ?Sized,
+        A: FromLua<'lua> + Typed,
+        F: 'static + MaybeSend + FnMut(&'lua Lua, AnyUserData<'lua>, A) -> mlua::Result<()>,
+    {
         self.0.add_field_function_set(name, function)
     }
 
     fn add_field_function_get<S, R, F>(&mut self, name: &S, function: F)
-        where
-            S: AsRef<str> + ?Sized,
-            R: IntoLua<'lua> + Typed,
-            F: 'static + MaybeSend + Fn(&'lua Lua, AnyUserData<'lua>) -> mlua::Result<R> {
+    where
+        S: AsRef<str> + ?Sized,
+        R: IntoLua<'lua> + Typed,
+        F: 'static + MaybeSend + Fn(&'lua Lua, AnyUserData<'lua>) -> mlua::Result<R>,
+    {
         self.0.add_field_function_get(name, function)
     }
 
     fn add_field_function_get_set<S, R, A, GET, SET>(&mut self, name: &S, get: GET, set: SET)
-        where
-            S: AsRef<str> + ?Sized,
-            R: IntoLua<'lua> + Typed,
-            A: FromLua<'lua> + Typed,
-            GET: 'static + MaybeSend + Fn(&'lua Lua, AnyUserData<'lua>) -> mlua::Result<R>,
-            SET: 'static + MaybeSend + Fn(&'lua Lua, AnyUserData<'lua>, A) -> mlua::Result<()> {
-        
+    where
+        S: AsRef<str> + ?Sized,
+        R: IntoLua<'lua> + Typed,
+        A: FromLua<'lua> + Typed,
+        GET: 'static + MaybeSend + Fn(&'lua Lua, AnyUserData<'lua>) -> mlua::Result<R>,
+        SET: 'static + MaybeSend + Fn(&'lua Lua, AnyUserData<'lua>, A) -> mlua::Result<()>,
+    {
         self.0.add_field_function_get(name, get);
         self.0.add_field_function_set(name, set);
     }
 
     fn add_field_method_set<S, A, M>(&mut self, name: &S, method: M)
-        where
-            S: AsRef<str> + ?Sized,
-            A: FromLua<'lua> + Typed,
-            M: 'static + MaybeSend + FnMut(&'lua Lua, &mut T, A) -> mlua::Result<()> {
+    where
+        S: AsRef<str> + ?Sized,
+        A: FromLua<'lua> + Typed,
+        M: 'static + MaybeSend + FnMut(&'lua Lua, &mut T, A) -> mlua::Result<()>,
+    {
         self.0.add_field_method_set(name, method)
     }
 
     fn add_field_method_get<S, R, M>(&mut self, name: &S, method: M)
-        where
-            S: AsRef<str> + ?Sized,
-            R: IntoLua<'lua> + Typed,
-            M: 'static + MaybeSend + Fn(&'lua Lua, &T) -> mlua::Result<R> {
+    where
+        S: AsRef<str> + ?Sized,
+        R: IntoLua<'lua> + Typed,
+        M: 'static + MaybeSend + Fn(&'lua Lua, &T) -> mlua::Result<R>,
+    {
         self.0.add_field_method_get(name, method)
     }
 
     fn add_field_method_get_set<S, R, A, GET, SET>(&mut self, name: &S, get: GET, set: SET)
-            where
-                S: AsRef<str> + ?Sized,
-                R: IntoLua<'lua> + Typed,
-                A: FromLua<'lua> + Typed,
-                GET: 'static + MaybeSend + Fn(&'lua Lua, &T) -> mlua::Result<R>,
-                SET: 'static + MaybeSend + Fn(&'lua Lua, &mut T, A) -> mlua::Result<()> {
-        
+    where
+        S: AsRef<str> + ?Sized,
+        R: IntoLua<'lua> + Typed,
+        A: FromLua<'lua> + Typed,
+        GET: 'static + MaybeSend + Fn(&'lua Lua, &T) -> mlua::Result<R>,
+        SET: 'static + MaybeSend + Fn(&'lua Lua, &mut T, A) -> mlua::Result<()>,
+    {
         self.0.add_field_method_get(name, get);
         self.0.add_field_method_set(name, set);
     }
 
     fn add_meta_field_with<R, F>(&mut self, meta: MetaMethod, f: F)
-        where
-            F: 'static + MaybeSend + Fn(&'lua Lua) -> mlua::Result<R>,
-            R: IntoLua<'lua> {
+    where
+        F: 'static + MaybeSend + Fn(&'lua Lua) -> mlua::Result<R>,
+        R: IntoLua<'lua>,
+    {
         self.0.add_meta_field_with(meta, f)
     }
 }
 
-impl<'lua, 'ctx, T: UserData, U: UserDataMethods<'lua, T>> TypedDataMethods<'lua, T> for WrappedGenerator<'ctx, U> {
-    fn document(&mut self, _documentation: &str) -> &mut Self { self }
+impl<'lua, 'ctx, T: UserData, U: UserDataMethods<'lua, T>> TypedDataMethods<'lua, T>
+    for WrappedGenerator<'ctx, U>
+{
+    fn document(&mut self, _documentation: &str) -> &mut Self {
+        self
+    }
 
     fn add_method<S, A, R, M>(&mut self, name: &S, method: M)
-        where
-            S: ?Sized + AsRef<str>,
-            A: FromLuaMulti<'lua> + TypedMultiValue,
-            R: IntoLuaMulti<'lua> + TypedMultiValue,
-            M: 'static + MaybeSend + Fn(&'lua Lua, &T, A) -> mlua::Result<R> {
+    where
+        S: ?Sized + AsRef<str>,
+        A: FromLuaMulti<'lua> + TypedMultiValue,
+        R: IntoLuaMulti<'lua> + TypedMultiValue,
+        M: 'static + MaybeSend + Fn(&'lua Lua, &T, A) -> mlua::Result<R>,
+    {
         self.0.add_method(name, method)
     }
 
     fn add_function<S, A, R, F>(&mut self, name: &S, function: F)
-        where
-            S: ?Sized + AsRef<str>,
-            A: FromLuaMulti<'lua> + TypedMultiValue,
-            R: IntoLuaMulti<'lua> + TypedMultiValue,
-            F: 'static + MaybeSend + Fn(&'lua Lua, A) -> mlua::Result<R> {
+    where
+        S: ?Sized + AsRef<str>,
+        A: FromLuaMulti<'lua> + TypedMultiValue,
+        R: IntoLuaMulti<'lua> + TypedMultiValue,
+        F: 'static + MaybeSend + Fn(&'lua Lua, A) -> mlua::Result<R>,
+    {
         self.0.add_function(name, function)
     }
 
     fn add_method_mut<S, A, R, M>(&mut self, name: &S, method: M)
-        where
-            S: ?Sized + AsRef<str>,
-            A: FromLuaMulti<'lua> + TypedMultiValue,
-            R: IntoLuaMulti<'lua> + TypedMultiValue,
-            M: 'static + MaybeSend + FnMut(&'lua Lua, &mut T, A) -> mlua::Result<R> {
+    where
+        S: ?Sized + AsRef<str>,
+        A: FromLuaMulti<'lua> + TypedMultiValue,
+        R: IntoLuaMulti<'lua> + TypedMultiValue,
+        M: 'static + MaybeSend + FnMut(&'lua Lua, &mut T, A) -> mlua::Result<R>,
+    {
         self.0.add_method_mut(name, method)
     }
 
     fn add_meta_method<A, R, M>(&mut self, meta: MetaMethod, method: M)
-        where
-            A: FromLuaMulti<'lua> + TypedMultiValue,
-            R: IntoLuaMulti<'lua> + TypedMultiValue,
-            M: 'static + MaybeSend + Fn(&'lua Lua, &T, A) -> mlua::Result<R> {
+    where
+        A: FromLuaMulti<'lua> + TypedMultiValue,
+        R: IntoLuaMulti<'lua> + TypedMultiValue,
+        M: 'static + MaybeSend + Fn(&'lua Lua, &T, A) -> mlua::Result<R>,
+    {
         self.0.add_meta_method(meta, method)
     }
 
-    #[cfg(feature="async")]
+    #[cfg(feature = "async")]
     fn add_async_method<'s, S: ?Sized + AsRef<str>, A, R, M, MR>(&mut self, name: &S, method: M)
-        where
-            'lua: 's,
-            T: 'static,
-            M: Fn(&'lua Lua, &'s T, A) -> MR + MaybeSend + 'static,
-            A: FromLuaMulti<'lua> + TypedMultiValue,
-            MR: std::future::Future<Output = mlua::Result<R>> + 's,
-            R: IntoLuaMulti<'lua> {
+    where
+        'lua: 's,
+        T: 'static,
+        M: Fn(&'lua Lua, &'s T, A) -> MR + MaybeSend + 'static,
+        A: FromLuaMulti<'lua> + TypedMultiValue,
+        MR: std::future::Future<Output = mlua::Result<R>> + 's,
+        R: IntoLuaMulti<'lua>,
+    {
         self.0.add_async_method(name, method)
     }
 
     fn add_function_mut<S, A, R, F>(&mut self, name: &S, function: F)
-        where
-            S: ?Sized + AsRef<str>,
-            A: FromLuaMulti<'lua> + TypedMultiValue,
-            R: IntoLuaMulti<'lua> + TypedMultiValue,
-            F: 'static + MaybeSend + FnMut(&'lua Lua, A) -> mlua::Result<R> {
+    where
+        S: ?Sized + AsRef<str>,
+        A: FromLuaMulti<'lua> + TypedMultiValue,
+        R: IntoLuaMulti<'lua> + TypedMultiValue,
+        F: 'static + MaybeSend + FnMut(&'lua Lua, A) -> mlua::Result<R>,
+    {
         self.0.add_function_mut(name, function)
     }
 
     fn add_meta_function<A, R, F>(&mut self, meta: MetaMethod, function: F)
-        where
-            A: FromLuaMulti<'lua> + TypedMultiValue,
-            R: IntoLuaMulti<'lua> + TypedMultiValue,
-            F: 'static + MaybeSend + Fn(&'lua Lua, A) -> mlua::Result<R> {
+    where
+        A: FromLuaMulti<'lua> + TypedMultiValue,
+        R: IntoLuaMulti<'lua> + TypedMultiValue,
+        F: 'static + MaybeSend + Fn(&'lua Lua, A) -> mlua::Result<R>,
+    {
         self.0.add_meta_function(meta, function)
     }
 
-    #[cfg(feature="async")]
+    #[cfg(feature = "async")]
     fn add_async_function<S: ?Sized, A, R, F, FR>(&mut self, name: &S, function: F)
-        where
-            S: AsRef<str>,
-            A: FromLuaMulti<'lua> + TypedMultiValue,
-            R: IntoLuaMulti<'lua> + TypedMultiValue,
-            F: 'static + MaybeSend + Fn(&'lua Lua, A) -> FR,
-            FR: 'lua + std::future::Future<Output = mlua::Result<R>> {
+    where
+        S: AsRef<str>,
+        A: FromLuaMulti<'lua> + TypedMultiValue,
+        R: IntoLuaMulti<'lua> + TypedMultiValue,
+        F: 'static + MaybeSend + Fn(&'lua Lua, A) -> FR,
+        FR: 'lua + std::future::Future<Output = mlua::Result<R>>,
+    {
         self.0.add_async_function(name, function)
     }
 
     fn add_meta_method_mut<A, R, M>(&mut self, meta: MetaMethod, method: M)
-        where
-            A: FromLuaMulti<'lua> + TypedMultiValue,
-            R: IntoLuaMulti<'lua> + TypedMultiValue,
-            M: 'static + MaybeSend + FnMut(&'lua Lua, &mut T, A) -> mlua::Result<R> {
+    where
+        A: FromLuaMulti<'lua> + TypedMultiValue,
+        R: IntoLuaMulti<'lua> + TypedMultiValue,
+        M: 'static + MaybeSend + FnMut(&'lua Lua, &mut T, A) -> mlua::Result<R>,
+    {
         self.0.add_meta_method_mut(meta, method)
     }
 
     fn add_meta_function_mut<A, R, F>(&mut self, meta: MetaMethod, function: F)
-        where
-            A: FromLuaMulti<'lua> + TypedMultiValue,
-            R: IntoLuaMulti<'lua> + TypedMultiValue,
-            F: 'static + MaybeSend + FnMut(&'lua Lua, A) -> mlua::Result<R> {
+    where
+        A: FromLuaMulti<'lua> + TypedMultiValue,
+        R: IntoLuaMulti<'lua> + TypedMultiValue,
+        F: 'static + MaybeSend + FnMut(&'lua Lua, A) -> mlua::Result<R>,
+    {
         self.0.add_meta_function_mut(meta, function)
     }
 }

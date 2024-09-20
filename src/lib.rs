@@ -1,6 +1,6 @@
 use std::path::Path;
 
-use mlua::{FromLuaMulti, IntoLua, IntoLuaMulti, Lua, Table};
+use mlua::{AnyUserData, FromLua, FromLuaMulti, IntoLua, IntoLuaMulti, Lua, Table, UserDataFields};
 
 pub mod require;
 pub mod typed;
@@ -10,6 +10,7 @@ mod macros;
 pub use mlua_extras_derive::{UserData, Typed};
 
 pub use error::{Report, Result};
+use typed::MaybeSend;
 
 // Quality of Life
 //
@@ -139,6 +140,8 @@ pub trait LuaExtras {
         A: FromLuaMulti<'lua>,
         R: IntoLuaMulti<'lua>,
         F: Fn(&'lua Lua, A) -> mlua::Result<R> + Send + 'static;
+
+    fn require<'lua, R: FromLua<'lua>>(&'lua self, path: impl AsRef<str>) -> mlua::Result<R>;
 }
 
 impl LuaExtras for Lua {
@@ -288,5 +291,66 @@ impl LuaExtras for Lua {
         self.globals()
             .get::<_, Table>("package")?
             .set("cpath", lua_path)
+    }
+
+    fn require<'lua, R: FromLua<'lua>>(&'lua self, path: impl AsRef<str>) -> mlua::Result<R> {
+        let segments = path.as_ref().split('.').filter_map(|v| (!v.is_empty()).then_some(v.trim())).collect::<Vec<_>>();
+
+        let mut module = self.globals();
+        if !segments.is_empty() {
+            for seg in &segments[..segments.len()-1] {
+                module = module.get::<_, Table>(*seg)?;
+            }
+        }
+
+        match segments.last() {
+            Some(seg) => module.get::<_, R>(*seg),
+            None => Err(mlua::Error::runtime(format!("module not found: {:?}", path.as_ref())))
+        }
+    }
+}
+
+/// Helper that combines some of the assignments of fields for UserData
+pub trait UserDataGetSet<'lua, T> {
+    /// Combination of [add_field_method_get](mlua::UserDataFields::add_field_method_get) and [add_field_method_set](mlua::UserDataFields::add_field_method_set)
+    fn add_field_method_get_set<S, R, A, GET, SET>(&mut self, name: &S, get: GET, set: SET)
+    where
+        S: AsRef<str> + ?Sized,
+        R: IntoLua<'lua>,
+        A: FromLua<'lua>,
+        GET: 'static + MaybeSend + Fn(&'lua Lua, &T) -> mlua::Result<R>,
+        SET: 'static + MaybeSend + Fn(&'lua Lua, &mut T, A) -> mlua::Result<()>;
+
+    /// Typed version of [add_field_function_get](mlua::UserDataFields::add_field_function_get) and [add_field_function_set](mlua::UserDataFields::add_field_function_set) combined
+    fn add_field_function_get_set<S, R, A, GET, SET>(&mut self, name: &S, get: GET, set: SET)
+    where
+        S: AsRef<str> + ?Sized,
+        R: IntoLua<'lua>,
+        A: FromLua<'lua>,
+        GET: 'static + MaybeSend + Fn(&'lua Lua, AnyUserData<'lua>) -> mlua::Result<R>,
+        SET: 'static + MaybeSend + Fn(&'lua Lua, AnyUserData<'lua>, A) -> mlua::Result<()>;
+}
+
+impl<'lua, T, U: UserDataFields<'lua, T>> UserDataGetSet<'lua, T> for U {
+    fn add_field_method_get_set<S, R, A, GET, SET>(&mut self, name: &S, get: GET, set: SET)
+        where
+            S: AsRef<str> + ?Sized,
+            R: IntoLua<'lua>,
+            A: FromLua<'lua>,
+            GET: 'static + MaybeSend + Fn(&'lua Lua, &T) -> mlua::Result<R>,
+            SET: 'static + MaybeSend + Fn(&'lua Lua, &mut T, A) -> mlua::Result<()> {
+        self.add_field_method_get(name, get);
+        self.add_field_method_set(name, set);
+    }
+
+    fn add_field_function_get_set<S, R, A, GET, SET>(&mut self, name: &S, get: GET, set: SET)
+        where
+            S: AsRef<str> + ?Sized,
+            R: IntoLua<'lua>,
+            A: FromLua<'lua>,
+            GET: 'static + MaybeSend + Fn(&'lua Lua, AnyUserData<'lua>) -> mlua::Result<R>,
+            SET: 'static + MaybeSend + Fn(&'lua Lua, AnyUserData<'lua>, A) -> mlua::Result<()> {
+        self.add_field_function_get(name, get);
+        self.add_field_function_set(name, set);
     }
 }
