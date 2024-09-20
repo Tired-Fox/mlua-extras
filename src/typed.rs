@@ -1,6 +1,5 @@
-use std::{borrow::Cow, marker::PhantomData};
+use std::{borrow::Cow, collections::BTreeMap, marker::PhantomData};
 
-use hashbrown::HashMap;
 use mlua::{AnyUserData, FromLua, FromLuaMulti, Function, IntoLua, IntoLuaMulti, Lua, MetaMethod, UserData, UserDataFields, UserDataMethods, Value};
 
 #[cfg(feature = "send")]
@@ -259,9 +258,14 @@ pub trait TypedDataFields<'lua, T> {
         R: IntoLua<'lua> + Typed;
 }
 
-#[derive(Debug, Clone, PartialEq, PartialOrd)]
+#[derive(Debug, Clone, PartialEq, strum::AsRefStr)]
 pub enum Type {
     Single(Cow<'static, str>),
+    Alias(Cow<'static, str>, Box<Type>),
+    Class(Cow<'static, str>, Box<TypeGenerator>),
+    Module(Cow<'static, str>, Box<TypeGenerator>),
+    Tuple(Vec<Type>),
+    Struct(BTreeMap<&'static str, Type>),
     Variadic(Box<Type>),
     Union(Vec<Type>),
     Array(Vec<Type>),
@@ -304,6 +308,34 @@ impl Type {
     pub fn single(value: impl Into<Cow<'static, str>>) -> Self {
         Self::Single(value.into())
     }
+
+    pub fn alias(name: impl Into<Cow<'static, str>>, ty: Type) -> Self {
+        Self::Alias(name.into(), Box::new(ty))
+    }
+
+    pub fn variadic(ty: Type) -> Self {
+        Self::Variadic(Box::new(ty))
+    }
+
+    pub fn array(types: impl IntoIterator<Item=Type>) -> Self {
+       Self::Array(types.into_iter().collect()) 
+    }
+
+    pub fn union(types: impl IntoIterator<Item=Type>) -> Self {
+       Self::Union(types.into_iter().collect()) 
+    }
+
+    pub fn tuple(types: impl IntoIterator<Item=Type>) -> Self {
+       Self::Tuple(types.into_iter().collect()) 
+    }
+
+    pub fn class<T: TypedUserData>(name: impl Into<Cow<'static, str>>) -> Self {
+        Self::Class(name.into(), Box::new(TypeGenerator::new::<T>()))
+    }
+
+    pub fn module<T: TypedUserData>(name: impl Into<Cow<'static, str>>) -> Self {
+        Self::Module(name.into(), Box::new(TypeGenerator::new::<T>()))
+    }
 }
 
 #[macro_export]
@@ -342,7 +374,7 @@ impl<I: Into<Type>> From<Vec<I>> for Type {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, PartialOrd)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Param {
     ///If the parameter has a name (will default to Param{number} if None)
     pub name: Option<Cow<'static, str>>,
@@ -379,7 +411,7 @@ pub trait TypedMultiValue {
     }
 }
 
-macro_rules! impl_teal_multi_value {
+macro_rules! impl_typed_multi_value {
     () => (
         impl TypedMultiValue for () {
             #[allow(unused_mut)]
@@ -413,26 +445,25 @@ where
     }
 }
 
-impl_teal_multi_value!(A B C D E F G H I J K L M N O P);
-impl_teal_multi_value!(A B C D E F G H I J K L M N O);
-impl_teal_multi_value!(A B C D E F G H I J K L M N);
-impl_teal_multi_value!(A B C D E F G H I J K L M);
-impl_teal_multi_value!(A B C D E F G H I J K L);
-impl_teal_multi_value!(A B C D E F G H I J K);
-impl_teal_multi_value!(A B C D E F G H I J);
-impl_teal_multi_value!(A B C D E F G H I);
-impl_teal_multi_value!(A B C D E F G H);
-impl_teal_multi_value!(A B C D E F G);
-impl_teal_multi_value!(A B C D E F);
-impl_teal_multi_value!(A B C D E);
-impl_teal_multi_value!(A B C D);
-impl_teal_multi_value!(A B C);
-impl_teal_multi_value!(A B);
-impl_teal_multi_value!(A);
-impl_teal_multi_value!();
+impl_typed_multi_value!(A B C D E F G H I J K L M N O P);
+impl_typed_multi_value!(A B C D E F G H I J K L M N O);
+impl_typed_multi_value!(A B C D E F G H I J K L M N);
+impl_typed_multi_value!(A B C D E F G H I J K L M);
+impl_typed_multi_value!(A B C D E F G H I J K L);
+impl_typed_multi_value!(A B C D E F G H I J K);
+impl_typed_multi_value!(A B C D E F G H I J);
+impl_typed_multi_value!(A B C D E F G H I);
+impl_typed_multi_value!(A B C D E F G H);
+impl_typed_multi_value!(A B C D E F G);
+impl_typed_multi_value!(A B C D E F);
+impl_typed_multi_value!(A B C D E);
+impl_typed_multi_value!(A B C D);
+impl_typed_multi_value!(A B C);
+impl_typed_multi_value!(A B);
+impl_typed_multi_value!(A);
+impl_typed_multi_value!();
 
 
-//tealr::TealMultiValue;
 pub struct TypedFunction<'lua, Params, Response>
 where
     Params: TypedMultiValue,
@@ -499,7 +530,7 @@ where
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Field {
     pub name: Cow<'static, str>,
     pub ty: Type,
@@ -507,7 +538,7 @@ pub struct Field {
     pub docs: Vec<String>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Fun {
     pub name: Cow<'static, str>,
     pub params: Vec<Param>,
@@ -516,19 +547,29 @@ pub struct Fun {
     pub docs: Vec<String>,
 }
 
-#[derive(Default, Debug, Clone)]
+#[derive(Default, Debug, Clone, PartialEq)]
 pub struct TypeGenerator {
     // PERF: Is it worth embedding luals annotation syntax?
-    type_doc: Vec<String>,
+    pub type_doc: Vec<String>,
     queued_docs: Vec<String>,
 
-    fields: HashMap<Cow<'static, str>, Field>,
-    static_fields: HashMap<Cow<'static, str>, Field>,
-    meta_fields: HashMap<Cow<'static, str>, Field>,
-    methods: HashMap<Cow<'static, str>, Fun>,
-    meta_methods: HashMap<Cow<'static, str>, Fun>,
-    functions: HashMap<Cow<'static, str>, Fun>,
-    meta_functions: HashMap<Cow<'static, str>, Fun>,
+    pub fields: BTreeMap<Cow<'static, str>, Field>,
+    pub static_fields: BTreeMap<Cow<'static, str>, Field>,
+    pub meta_fields: BTreeMap<Cow<'static, str>, Field>,
+    pub methods: BTreeMap<Cow<'static, str>, Fun>,
+    pub meta_methods: BTreeMap<Cow<'static, str>, Fun>,
+    pub functions: BTreeMap<Cow<'static, str>, Fun>,
+    pub meta_functions: BTreeMap<Cow<'static, str>, Fun>,
+}
+
+impl TypeGenerator {
+    pub fn new<T: TypedUserData>() -> Self {
+        let mut gen = Self::default();
+        T::add_documentation(&mut gen);
+        T::add_fields(&mut gen);
+        T::add_methods(&mut gen);
+        gen
+    }
 }
 
 impl<T: TypedUserData> TypedDataDocumentation<T> for TypeGenerator {

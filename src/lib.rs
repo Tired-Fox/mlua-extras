@@ -7,7 +7,7 @@ pub mod typed;
 mod error;
 mod macros;
 
-pub use mlua_extras_derive::UserData;
+pub use mlua_extras_derive::{UserData, Typed};
 
 pub use error::{Report, Result};
 
