@@ -2,11 +2,12 @@ use std::path::Path;
 
 use mlua::{AnyUserData, FromLua, FromLuaMulti, IntoLua, IntoLuaMulti, Lua, Table, UserDataFields};
 
-pub mod require;
+mod require;
 pub mod typed;
 mod error;
 mod macros;
 
+pub use require::Require;
 pub use mlua_extras_derive::{UserData, Typed};
 
 pub use error::{Report, Result};

@@ -1,36 +1,5 @@
 use mlua::{Function, Lua, Table, UserData, Value, Variadic};
-use mlua_extras::{require::{Module, Require}, LuaExtras};
-
-struct TableExtras;
-impl Module for TableExtras {
-    fn extend(lua: &Lua, table: &mlua::Table) -> Result<(), mlua::Error> {
-        table.set(
-            "keys",
-            lua.create_function(|_: &mlua::Lua, this: Table| {
-                this.pairs::<Value, Value>()
-                    .map(|pair| {
-                        let pair = pair?;
-                        Ok(pair.0)
-                    })
-                    .collect::<mlua::Result<Vec<_>>>()
-            })?,
-        )?;
-
-        table.set(
-            "values",
-            lua.create_function(|_: &mlua::Lua, this: Table| {
-                this.pairs::<Value, Value>()
-                    .map(|pair| {
-                        let pair = pair?;
-                        Ok(pair.1)
-                    })
-                    .collect::<mlua::Result<Vec<_>>>()
-            })?,
-        )?;
-
-        Ok(())
-    }
-}
+use mlua_extras::{Require, LuaExtras};
 
 struct MyModule;
 impl UserData for MyModule {
@@ -67,14 +36,10 @@ mymodule.print(mymodule.data)
 fn main() -> mlua::Result<()> {
     let lua = Lua::new();
 
-    // Get a value in a nested module/table
+    // Get a value in a nested module/table (trait LuaExtras)
     let table = lua.require::<Table>("table")?;
-    // Also works with regular tables
+    // Also works with regular tables (trait Require)
     let _unpack = table.require::<Function>("unpack")?;
-
-    // Extend an existing table with a module's contents
-    TableExtras::extend(&lua, &table)?;
-    // TableExtras::extend(&lua, table)?;
 
     // Import a module into lua's global scope. This is just a UserData
     lua.set_global("mymodule", MyModule)?;

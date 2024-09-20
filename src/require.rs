@@ -1,4 +1,4 @@
-use mlua::{Error, FromLua, Lua, Table};
+use mlua::{Error, FromLua, Table};
 
 pub trait Require<'lua> {
     /// Fetch a nested table from the current scope
@@ -23,21 +23,5 @@ impl<'lua> Require<'lua> for Table<'lua> {
             Some(seg) => module.get::<_, R>(*seg),
             None => Err(Error::runtime(format!("module not found: {:?}", path.as_ref())))
         }
-    }
-}
-
-pub trait Module {
-    /// Extend an existing table with the modules contents
-    fn extend(lua: &Lua, table: &Table) -> mlua::Result<()>;
-
-    /// Create the module and return it
-    ///
-    /// # Returns
-    ///
-    /// [`mlua::Table`] containing the module
-    fn require(lua: &Lua) -> mlua::Result<Table>  {
-        let table = lua.create_table()?;
-        Self::extend(lua, &table)?;
-        Ok(table)
     }
 }

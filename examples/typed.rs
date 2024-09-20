@@ -1,6 +1,11 @@
+use std::{io::stdout, path::PathBuf};
+
 use mlua::{FromLua, Lua, MetaMethod, UserDataMethods, Value};
 use mlua_extras::{
-    typed::{generator::Definitions, Type, TypedDataFields, TypedDataMethods, TypedFunction, TypedUserData},
+    typed::{
+        generator::{Definitions, TypeFileGenerator},
+        Type, TypedDataFields, TypedDataMethods, TypedFunction, TypedUserData,
+    },
     LuaExtras, Typed, UserData,
 };
 
@@ -43,34 +48,68 @@ impl<'lua> FromLua<'lua> for Color {
                 "cyan" => Self::Cyan,
                 "magenta" => Self::Magenta,
                 "white" => Self::White,
-                other => return Err(mlua::Error::FromLuaConversionError { from: "string", to: "Color", message: Some(format!("unknown system color {other}")) })
+                other => {
+                    return Err(mlua::Error::FromLuaConversionError {
+                        from: "string",
+                        to: "Color",
+                        message: Some(format!("unknown system color {other}")),
+                    })
+                }
             }),
-            Value::Integer(v) => if let 0..=255 = v {
-                Ok(Self::Xterm(v as u8))
-            } else {
-                Err(mlua::Error::FromLuaConversionError { from: "integer", to: "Color", message: Some("xterm colors must be between 0 and 255".into()) })
-            },
+            Value::Integer(v) => {
+                if let 0..=255 = v {
+                    Ok(Self::Xterm(v as u8))
+                } else {
+                    Err(mlua::Error::FromLuaConversionError {
+                        from: "integer",
+                        to: "Color",
+                        message: Some("xterm colors must be between 0 and 255".into()),
+                    })
+                }
+            }
             Value::Table(tbl) => {
-                let values = tbl.clone().pairs::<mlua::Integer, mlua::Integer>()
-                    .map(|v| v.and_then(|v| if let 0..=255 = v.1 {
-                        Ok(v.1 as u8)
-                    } else {
-                        Err(mlua::Error::FromLuaConversionError { from: "integer", to: "Color", message: Some("rgb colors must be between 0 and 255".into()) })
-                    }))
+                let values = tbl
+                    .clone()
+                    .pairs::<mlua::Integer, mlua::Integer>()
+                    .map(|v| {
+                        v.and_then(|v| {
+                            if let 0..=255 = v.1 {
+                                Ok(v.1 as u8)
+                            } else {
+                                Err(mlua::Error::FromLuaConversionError {
+                                    from: "integer",
+                                    to: "Color",
+                                    message: Some("rgb colors must be between 0 and 255".into()),
+                                })
+                            }
+                        })
+                    })
                     .collect::<mlua::Result<Vec<_>>>()?;
                 if values.len() != 3 {
-                    Err(mlua::Error::FromLuaConversionError { from: "table", to: "Color", message: Some("rgb tables must be an array of three integer values".into()) })
+                    Err(mlua::Error::FromLuaConversionError {
+                        from: "table",
+                        to: "Color",
+                        message: Some("rgb tables must be an array of three integer values".into()),
+                    })
                 } else {
                     let mut values = values.into_iter();
-                    Ok(Self::Rgb(values.next().unwrap(), values.next().unwrap(), values.next().unwrap()))
+                    Ok(Self::Rgb(
+                        values.next().unwrap(),
+                        values.next().unwrap(),
+                        values.next().unwrap(),
+                    ))
                 }
-            },
-            other => Err(mlua::Error::FromLuaConversionError { from: other.type_name(), to: "Color", message: None })
+            }
+            other => Err(mlua::Error::FromLuaConversionError {
+                from: other.type_name(),
+                to: "Color",
+                message: None,
+            }),
         }
     }
 }
 
-#[derive(Default, UserData, Typed)]
+#[derive(Default, Debug, UserData, Typed)]
 struct Example {
     color: Color,
 }
@@ -105,7 +144,9 @@ impl TypedUserData for Example {
             .add_method("print", |_lua, this, _: ()| {
                 println!("{:?}", this.color);
                 Ok(())
-            })
+            });
+
+        methods.add_meta_method(MetaMethod::ToString, |_lua, this, ()| { Ok(format!("{this:?}"))});
     }
 }
 
@@ -153,13 +194,22 @@ fn main() -> mlua::Result<()> {
     //}
 
     let definitions = Definitions::generate("init")
-        .register_alias("options", Type::single("\"literal\""))
-        .register_class::<Example>("Example")
-        .register_module::<Example>("example")
+        .register::<Example>()
+        .register_enum::<Color>()?
+        .value_with::<Example, _>("example", ["Example module"])
+        .alias_with("options", Type::literal_string("literal"), ["Options"])
+        .function_with::<String, (), _>("hello", (), ["Say hello to someone"])
         .finish();
 
-    for definition in definitions.iter() {
-        println!("{definition:?}");
+    let types_path = PathBuf::from("examples/types");
+    if !types_path.exists() {
+        std::fs::create_dir_all(&types_path).unwrap();
+    }
+
+    let gen = TypeFileGenerator::new(definitions);
+    for (name, definition) in gen.iter() {
+        println!("==== \x1b[1;33mexample/types/{name}\x1b[0m ====");
+        definition.write_file(types_path.join(name)).unwrap();
     }
 
     Ok(())

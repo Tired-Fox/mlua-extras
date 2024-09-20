@@ -98,11 +98,9 @@ pub fn derive_typed(input: TokenStream) -> TokenStream {
             quote!(
                 impl mlua_extras::typed::Typed for #name {
                     fn ty() -> mlua_extras::typed::Type {
-                        mlua_extras::typed::Type::alias(
+                        mlua_extras::typed::Type::r#enum(
                             #value,
-                            mlua_extras::typed::Type::Union(Vec::from([
-                                #(#variants,)*
-                            ]))
+                            [ #(#variants,)* ]
                         )
                     }
                 }

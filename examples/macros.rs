@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 
-use mlua::{Function, Lua, LuaOptions, StdLib};
-use mlua_extras::{function, require::TableImport as _, LuaExtras};
+use mlua::{Function, Lua, LuaOptions, StdLib, Table, Value};
+use mlua_extras::{function, require::Require, LuaExtras};
 
 fn main() -> mlua_extras::Result<()> {
     let lua = unsafe { Lua::unsafe_new_with(StdLib::ALL, LuaOptions::new()) };
@@ -13,6 +13,29 @@ fn main() -> mlua_extras::Result<()> {
         /// Some function documentation
         lua fn add(_lua: &mlua::Lua, a: usize, b: usize) {
             Ok(a + b)
+        }
+    }?;
+
+    // Extend an existing table with a function
+    let table = lua.globals().get::<_, Table>("table")?;
+    function! {
+        lua fn table.keys(_lua, this: Table) {
+            this.pairs::<Value, Value>()
+                .map(|pair| {
+                    let pair = pair?;
+                    Ok(pair.0)
+                })
+                .collect::<mlua::Result<Vec<_>>>()
+        }
+    }?;
+    function!{
+         lua fn table.values(_lua, this: Table) {
+            this.pairs::<Value, Value>()
+                .map(|pair| {
+                    let pair = pair?;
+                    Ok(pair.1)
+                })
+            .collect::<mlua::Result<Vec<_>>>()
         }
     }?;
 

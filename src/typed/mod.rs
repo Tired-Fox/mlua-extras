@@ -46,7 +46,7 @@ macro_rules! impl_static_typed {
             $(
                 impl Typed for $target {
                     fn ty() -> Type {
-                        Type::Single($name.into())
+                        Type::single($name)
                     }
                 }
             )*
@@ -65,7 +65,7 @@ macro_rules! impl_static_typed_generic {
             $(
                 impl<$($lt,)+> Typed for $target {
                     fn ty() -> Type {
-                        Type::Single($name.into())
+                        Type::single($name)
                     }
                 }
             )*
@@ -268,10 +268,23 @@ pub trait TypedDataFields<'lua, T> {
 
 #[derive(Debug, Clone, PartialEq, strum::AsRefStr, PartialOrd, Eq, Ord)]
 pub enum Type {
+    /// string
+    /// nil
+    /// boolean
+    /// "literal"
+    /// 3
+    /// ... etc
     Single(Cow<'static, str>),
-    Alias(Cow<'static, str>, Box<Type>),
-    Class(Cow<'static, str>, Box<TypeGenerator>),
-    Module(Cow<'static, str>, Box<TypeGenerator>),
+    Value(Box<Type>),
+    /// --- @alias {name} <type>
+    Alias(Box<Type>),
+    /// Same as alias but with a set name predefined
+    /// --- @alias {name} <type>
+    Enum(Cow<'static, str>, Vec<Type>),
+    /// --- @class {name}
+    /// --- @field ...
+    Class(Box<TypeGenerator>),
+    /// { [1]: <type>, [2]: <type>, ...etc }
     Tuple(Vec<Type>),
     Struct(BTreeMap<&'static str, Type>),
     Variadic(Box<Type>),
@@ -279,7 +292,6 @@ pub enum Type {
     Array(Vec<Type>),
     Map(Box<Type>, Box<Type>),
     Function {
-        name: Option<Cow<'static, str>>,
         params: Vec<Param>,
         returns: Vec<Type>,
     },
@@ -316,12 +328,24 @@ impl std::ops::BitOr for Type {
 }
 
 impl Type {
+    pub fn literal_string<T: std::fmt::Display>(value: T) -> Self {
+        Self::Single(format!("\"{value}\"").into())
+    }
+
+    pub fn literal<T: std::fmt::Display>(value: T) -> Self {
+        Self::Single(value.to_string().into())
+    }
+
     pub fn single(value: impl Into<Cow<'static, str>>) -> Self {
         Self::Single(value.into())
     }
 
-    pub fn alias(name: impl Into<Cow<'static, str>>, ty: Type) -> Self {
-        Self::Alias(name.into(), Box::new(ty))
+    pub fn r#enum(name: impl Into<Cow<'static, str>>, types: impl IntoIterator<Item=Type>) -> Self {
+        Self::Enum(name.into(), types.into_iter().collect())
+    }
+
+    pub fn alias(ty: Type) -> Self {
+        Self::Alias(Box::new(ty))
     }
 
     pub fn variadic(ty: Type) -> Self {
@@ -340,17 +364,12 @@ impl Type {
         Self::Tuple(types.into_iter().collect())
     }
 
-    pub fn class<T: TypedUserData>(name: impl Into<Cow<'static, str>>) -> Self {
-        Self::Class(name.into(), Box::new(TypeGenerator::new::<T>()))
+    pub fn class<T: TypedUserData>() -> Self {
+        Self::Class(Box::new(TypeGenerator::new::<T>()))
     }
 
-    pub fn module<T: TypedUserData>(name: impl Into<Cow<'static, str>>) -> Self {
-        Self::Module(name.into(), Box::new(TypeGenerator::new::<T>()))
-    }
-
-    pub fn function<Params: TypedMultiValue, Response: TypedMultiValue>(name: impl Into<Cow<'static, str>>, _: TypedFunction<Params, Response>) -> Self {
+    pub fn function<Params: TypedMultiValue, Response: TypedMultiValue>() -> Self {
         Self::Function{
-            name: Some(name.into()),
             params: Params::get_types_as_params(),
             returns: Response::get_types()
         }
@@ -463,7 +482,6 @@ impl_typed_multi_value!();
 
 #[derive(Debug, Clone, PartialEq, PartialOrd, Eq, Ord)]
 pub struct Field {
-    pub name: Cow<'static, str>,
     pub ty: Type,
     // PERF: Is it worth embedding luals annotation syntax?
     pub docs: Vec<String>,
@@ -471,7 +489,6 @@ pub struct Field {
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Fun {
-    pub name: Cow<'static, str>,
     pub params: Vec<Param>,
     pub returns: Vec<Type>,
     // PERF: Is it worth embedding luals annotation syntax?
@@ -522,13 +539,12 @@ impl<'lua, T: TypedUserData> TypedDataFields<'lua, T> for TypeGenerator {
     {
         let name: Cow<'static, str> = name.as_ref().to_string().into();
         self.static_fields
-            .entry(name.clone())
+            .entry(name)
             .and_modify(|v| {
                 v.docs.append(&mut self.queued_docs);
                 v.ty = v.ty.clone() | V::ty();
             })
             .or_insert(Field {
-                name,
                 ty: V::ty(),
                 docs: self.queued_docs.drain(..).collect::<Vec<_>>(),
             });
@@ -542,13 +558,12 @@ impl<'lua, T: TypedUserData> TypedDataFields<'lua, T> for TypeGenerator {
     {
         let name: Cow<'static, str> = name.as_ref().to_string().into();
         self.static_fields
-            .entry(name.clone())
+            .entry(name)
             .and_modify(|v| {
                 v.docs.append(&mut self.queued_docs);
                 v.ty = v.ty.clone() | A::ty();
             })
             .or_insert(Field {
-                name,
                 ty: A::ty(),
                 docs: self.queued_docs.drain(..).collect::<Vec<_>>(),
             });
@@ -562,13 +577,12 @@ impl<'lua, T: TypedUserData> TypedDataFields<'lua, T> for TypeGenerator {
     {
         let name: Cow<'static, str> = name.as_ref().to_string().into();
         self.static_fields
-            .entry(name.clone())
+            .entry(name)
             .and_modify(|v| {
                 v.docs.append(&mut self.queued_docs);
                 v.ty = v.ty.clone() | R::ty();
             })
             .or_insert(Field {
-                name,
                 ty: R::ty(),
                 docs: self.queued_docs.drain(..).collect::<Vec<_>>(),
             });
@@ -584,13 +598,12 @@ impl<'lua, T: TypedUserData> TypedDataFields<'lua, T> for TypeGenerator {
     {
         let name: Cow<'static, str> = name.as_ref().to_string().into();
         self.static_fields
-            .entry(name.clone())
+            .entry(name)
             .and_modify(|v| {
                 v.docs.append(&mut self.queued_docs);
                 v.ty = v.ty.clone() | A::ty() | R::ty();
             })
             .or_insert(Field {
-                name,
                 ty: A::ty() | R::ty(),
                 docs: self.queued_docs.drain(..).collect::<Vec<_>>(),
             });
@@ -604,13 +617,12 @@ impl<'lua, T: TypedUserData> TypedDataFields<'lua, T> for TypeGenerator {
     {
         let name: Cow<'static, str> = name.as_ref().to_string().into();
         self.fields
-            .entry(name.clone())
+            .entry(name)
             .and_modify(|v| {
                 v.docs.append(&mut self.queued_docs);
                 v.ty = v.ty.clone() | A::ty();
             })
             .or_insert(Field {
-                name,
                 ty: A::ty(),
                 docs: self.queued_docs.drain(..).collect::<Vec<_>>(),
             });
@@ -624,13 +636,12 @@ impl<'lua, T: TypedUserData> TypedDataFields<'lua, T> for TypeGenerator {
     {
         let name: Cow<'static, str> = name.as_ref().to_string().into();
         self.fields
-            .entry(name.clone())
+            .entry(name)
             .and_modify(|v| {
                 v.docs.append(&mut self.queued_docs);
                 v.ty = v.ty.clone() | R::ty();
             })
             .or_insert(Field {
-                name,
                 ty: R::ty(),
                 docs: self.queued_docs.drain(..).collect::<Vec<_>>(),
             });
@@ -646,13 +657,12 @@ impl<'lua, T: TypedUserData> TypedDataFields<'lua, T> for TypeGenerator {
     {
         let name: Cow<'static, str> = name.as_ref().to_string().into();
         self.fields
-            .entry(name.clone())
+            .entry(name)
             .and_modify(|v| {
                 v.docs.append(&mut self.queued_docs);
                 v.ty = v.ty.clone() | A::ty() | R::ty();
             })
             .or_insert(Field {
-                name,
                 ty: A::ty() | R::ty(),
                 docs: self.queued_docs.drain(..).collect::<Vec<_>>(),
             });
@@ -665,13 +675,12 @@ impl<'lua, T: TypedUserData> TypedDataFields<'lua, T> for TypeGenerator {
     {
         let name: Cow<'static, str> = meta.as_ref().to_string().into();
         self.meta_fields
-            .entry(name.clone())
+            .entry(name)
             .and_modify(|v| {
                 v.docs.append(&mut self.queued_docs);
                 v.ty = v.ty.clone() | R::ty();
             })
             .or_insert(Field {
-                name,
                 ty: R::ty(),
                 docs: self.queued_docs.drain(..).collect::<Vec<_>>(),
             });
@@ -693,9 +702,8 @@ impl<'lua, T: TypedUserData> TypedDataMethods<'lua, T> for TypeGenerator {
     {
         let name: Cow<'static, str> = name.as_ref().to_string().into();
         self.methods.insert(
-            name.clone(),
+            name,
             Fun {
-                name,
                 params: A::get_types_as_params(),
                 returns: R::get_types(),
                 docs: self.queued_docs.drain(..).collect::<Vec<_>>(),
@@ -712,9 +720,8 @@ impl<'lua, T: TypedUserData> TypedDataMethods<'lua, T> for TypeGenerator {
     {
         let name: Cow<'static, str> = name.as_ref().to_string().into();
         self.functions.insert(
-            name.clone(),
+            name,
             Fun {
-                name,
                 params: A::get_types_as_params(),
                 returns: R::get_types(),
                 docs: self.queued_docs.drain(..).collect::<Vec<_>>(),
@@ -731,9 +738,8 @@ impl<'lua, T: TypedUserData> TypedDataMethods<'lua, T> for TypeGenerator {
     {
         let name: Cow<'static, str> = name.as_ref().to_string().into();
         self.methods.insert(
-            name.clone(),
+            name,
             Fun {
-                name,
                 params: A::get_types_as_params(),
                 returns: R::get_types(),
                 docs: self.queued_docs.drain(..).collect::<Vec<_>>(),
@@ -749,9 +755,8 @@ impl<'lua, T: TypedUserData> TypedDataMethods<'lua, T> for TypeGenerator {
     {
         let name: Cow<'static, str> = meta.as_ref().to_string().into();
         self.meta_methods.insert(
-            name.clone(),
+            name,
             Fun {
-                name,
                 params: A::get_types_as_params(),
                 returns: R::get_types(),
                 docs: self.queued_docs.drain(..).collect::<Vec<_>>(),
@@ -771,9 +776,8 @@ impl<'lua, T: TypedUserData> TypedDataMethods<'lua, T> for TypeGenerator {
     {
         let name: Cow<'static, str> = name.as_ref().to_string().into();
         self.methods.insert(
-            name.clone(),
+            name,
             Fun {
-                name,
                 params: A::get_types_as_params(),
                 returns: R::get_types(),
                 docs: self.queued_docs.drain(..).collect::<Vec<_>>(),
@@ -790,9 +794,8 @@ impl<'lua, T: TypedUserData> TypedDataMethods<'lua, T> for TypeGenerator {
     {
         let name: Cow<'static, str> = name.as_ref().to_string().into();
         self.functions.insert(
-            name.clone(),
+            name,
             Fun {
-                name,
                 params: A::get_types_as_params(),
                 returns: R::get_types(),
                 docs: self.queued_docs.drain(..).collect::<Vec<_>>(),
@@ -808,9 +811,8 @@ impl<'lua, T: TypedUserData> TypedDataMethods<'lua, T> for TypeGenerator {
     {
         let name: Cow<'static, str> = meta.as_ref().to_string().into();
         self.meta_functions.insert(
-            name.clone(),
+            name,
             Fun {
-                name,
                 params: A::get_types_as_params(),
                 returns: R::get_types(),
                 docs: self.queued_docs.drain(..).collect::<Vec<_>>(),
@@ -829,9 +831,8 @@ impl<'lua, T: TypedUserData> TypedDataMethods<'lua, T> for TypeGenerator {
     {
         let name: Cow<'static, str> = name.as_ref().to_string().into();
         self.functions.insert(
-            name.clone(),
+            name,
             Fun {
-                name,
                 params: A::get_types_as_params(),
                 returns: R::get_types(),
                 docs: self.queued_docs.drain(..).collect::<Vec<_>>(),
@@ -847,9 +848,8 @@ impl<'lua, T: TypedUserData> TypedDataMethods<'lua, T> for TypeGenerator {
     {
         let name: Cow<'static, str> = meta.as_ref().to_string().into();
         self.meta_methods.insert(
-            name.clone(),
+            name,
             Fun {
-                name,
                 params: A::get_types_as_params(),
                 returns: R::get_types(),
                 docs: self.queued_docs.drain(..).collect::<Vec<_>>(),
@@ -865,9 +865,8 @@ impl<'lua, T: TypedUserData> TypedDataMethods<'lua, T> for TypeGenerator {
     {
         let name: Cow<'static, str> = meta.as_ref().to_string().into();
         self.meta_functions.insert(
-            name.clone(),
+            name,
             Fun {
-                name,
                 params: A::get_types_as_params(),
                 returns: R::get_types(),
                 docs: self.queued_docs.drain(..).collect::<Vec<_>>(),
