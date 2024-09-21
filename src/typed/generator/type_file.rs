@@ -2,7 +2,7 @@ use std::{path::Path, slice::Iter};
 
 use crate::typed::{Param, Type};
 
-use super::{DefinitionGroup, Definitions};
+use super::{Definition, Definitions};
 
 /// Generates a lua definition file for each [`Definition`][`crate::typed::generator::Definition`]
 ///
@@ -25,7 +25,7 @@ use super::{DefinitionGroup, Definitions};
 /// --- @type Example
 /// example = nil
 /// ```
-pub struct TypeFileGenerator<'def> {
+pub struct DefinitionFileGenerator<'def> {
     /// Extendion of each definition file: Default [`.d.lua`]
     ///
     /// **IMPORTANT** Must start with a dot
@@ -33,7 +33,7 @@ pub struct TypeFileGenerator<'def> {
     definitions: Definitions<'def>,
 }
 
-impl<'def> Default for TypeFileGenerator<'def> {
+impl<'def> Default for DefinitionFileGenerator<'def> {
     fn default() -> Self {
         Self {
             extension: ".d.lua".into(),
@@ -42,7 +42,7 @@ impl<'def> Default for TypeFileGenerator<'def> {
     }
 }
 
-impl<'def> TypeFileGenerator<'def> {
+impl<'def> DefinitionFileGenerator<'def> {
     /// Create a new generator given a collection of definitions
     pub fn new(definitions: Definitions<'def>) -> Self {
         Self {
@@ -57,20 +57,20 @@ impl<'def> TypeFileGenerator<'def> {
         self
     }
 
-    pub fn iter(&self) -> TypeFileIter<'_> {
-        TypeFileIter {
+    pub fn iter(&self) -> DefinitionFileIter<'_> {
+        DefinitionFileIter {
             extension: self.extension.clone(),
             definitions: self.definitions.iter(),
         }
     }
 }
 
-pub struct TypeFileIter<'def> {
+pub struct DefinitionFileIter<'def> {
     extension: String,
-    definitions: Iter<'def, DefinitionGroup<'def>>,
+    definitions: Iter<'def, Definition<'def>>,
 }
 
-impl<'def> Iterator for TypeFileIter<'def> {
+impl<'def> Iterator for DefinitionFileIter<'def> {
     type Item = (String, DefinitionWriter<'def>);
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -84,7 +84,7 @@ impl<'def> Iterator for TypeFileIter<'def> {
 }
 
 pub struct DefinitionWriter<'def> {
-    definition: &'def DefinitionGroup<'def>,
+    definition: &'def Definition<'def>,
 }
 
 impl DefinitionWriter<'_> {

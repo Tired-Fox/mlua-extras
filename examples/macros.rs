@@ -1,11 +1,11 @@
 use std::path::PathBuf;
 
 use mlua::{Function, Lua, LuaOptions, StdLib, Table, Value};
-use mlua_extras::{function, require::Require, LuaExtras};
+use mlua_extras::{function, LuaExtras, Require};
 
 fn main() -> mlua_extras::Result<()> {
     let lua = unsafe { Lua::unsafe_new_with(StdLib::ALL, LuaOptions::new()) };
-    
+
     lua.prepend_path(PathBuf::from("examples").join("?").join("init.lua"))?;
     lua.prepend_path(PathBuf::from("examples").join("?.lua"))?;
 
@@ -28,7 +28,7 @@ fn main() -> mlua_extras::Result<()> {
                 .collect::<mlua::Result<Vec<_>>>()
         }
     }?;
-    function!{
+    function! {
          lua fn table.values(_lua, this: Table) {
             this.pairs::<Value, Value>()
                 .map(|pair| {
@@ -57,8 +57,15 @@ fn main() -> mlua_extras::Result<()> {
     }?;
 
     assert_eq!(custom_function.call::<_, usize>((1, 2))?, 3);
-    assert_eq!(temp.require::<Function>("add")?.call::<_, usize>((1, 2))?, 3);
-    assert_eq!(temp.require::<Function>("nested.add")?.call::<_, usize>((1, 2))?, 3);
+    assert_eq!(
+        temp.require::<Function>("add")?.call::<_, usize>((1, 2))?,
+        3
+    );
+    assert_eq!(
+        temp.require::<Function>("nested.add")?
+            .call::<_, usize>((1, 2))?,
+        3
+    );
 
     Ok(())
 }

@@ -4,6 +4,7 @@ use mlua::{FromLua, FromLuaMulti, Function, IntoLua, IntoLuaMulti, Lua, Value};
 
 use super::{MaybeSend, Type, Typed, TypedMultiValue};
 
+/// A function parameter type representation
 #[derive(Debug, Clone, PartialEq, PartialOrd, Eq, Ord)]
 pub struct Param {
     ///If the parameter has a name (will default to Param{number} if None)
@@ -11,6 +12,7 @@ pub struct Param {
     ///The type of the parameter
     pub ty: Type,
 }
+
 impl<I: Into<Cow<'static, str>>> From<(I, Type)> for Param {
     fn from((name, ty): (I, Type)) -> Self {
         Param {
@@ -19,6 +21,7 @@ impl<I: Into<Cow<'static, str>>> From<(I, Type)> for Param {
         }
     }
 }
+
 impl From<Type> for Param {
     fn from(value: Type) -> Self {
         Param {
@@ -28,17 +31,25 @@ impl From<Type> for Param {
     }
 }
 
+/// Used to purely get function type information without converting it to anything
+/// else.
 pub trait IntoTypedFunction<'lua, Params: TypedMultiValue, Response: TypedMultiValue> {
-    fn into_typed_function(self, lua: &'lua Lua) -> mlua::Result<TypedFunction<'lua, Params, Response>>;
+    fn into_typed_function(
+        self,
+        lua: &'lua Lua,
+    ) -> mlua::Result<TypedFunction<'lua, Params, Response>>;
 }
 
-impl<'lua, F, Params, Response> IntoTypedFunction<'lua, Params, Response> for F 
+impl<'lua, F, Params, Response> IntoTypedFunction<'lua, Params, Response> for F
 where
     Params: TypedMultiValue + FromLuaMulti<'lua>,
     Response: TypedMultiValue + IntoLuaMulti<'lua>,
-    F: Fn(&'lua Lua, Params) -> mlua::Result<Response> + MaybeSend + 'static
+    F: Fn(&'lua Lua, Params) -> mlua::Result<Response> + MaybeSend + 'static,
 {
-    fn into_typed_function(self, lua: &'lua Lua) -> mlua::Result<TypedFunction<'lua, Params, Response>> {
+    fn into_typed_function(
+        self,
+        lua: &'lua Lua,
+    ) -> mlua::Result<TypedFunction<'lua, Params, Response>> {
         Ok(TypedFunction {
             inner: lua.create_function(self)?,
             _p: PhantomData,
@@ -52,25 +63,32 @@ where
     Params: TypedMultiValue + FromLuaMulti<'lua>,
     Response: TypedMultiValue + IntoLuaMulti<'lua>,
 {
-    fn into_typed_function(self, _lua: &'lua Lua) -> mlua::Result<TypedFunction<'lua, Params, Response>> {
+    fn into_typed_function(
+        self,
+        _lua: &'lua Lua,
+    ) -> mlua::Result<TypedFunction<'lua, Params, Response>> {
         Ok(TypedFunction {
             inner: self,
             _p: PhantomData,
-            _r: PhantomData
+            _r: PhantomData,
         })
     }
 }
 
-impl<'lua, Params, Response> IntoTypedFunction<'lua, Params, Response> for &TypedFunction<'lua, Params, Response>
+impl<'lua, Params, Response> IntoTypedFunction<'lua, Params, Response>
+    for &TypedFunction<'lua, Params, Response>
 where
     Params: TypedMultiValue + FromLuaMulti<'lua>,
     Response: TypedMultiValue + IntoLuaMulti<'lua>,
 {
-    fn into_typed_function(self, _lua: &'lua Lua) -> mlua::Result<TypedFunction<'lua, Params, Response>> {
+    fn into_typed_function(
+        self,
+        _lua: &'lua Lua,
+    ) -> mlua::Result<TypedFunction<'lua, Params, Response>> {
         Ok(TypedFunction {
             inner: self.inner.clone(),
             _p: PhantomData,
-            _r: PhantomData
+            _r: PhantomData,
         })
     }
 }
@@ -80,7 +98,10 @@ where
     Params: TypedMultiValue + FromLuaMulti<'lua>,
     Response: TypedMultiValue + IntoLuaMulti<'lua>,
 {
-    fn into_typed_function(self, lua: &'lua Lua) -> mlua::Result<TypedFunction<'lua, Params, Response>> {
+    fn into_typed_function(
+        self,
+        lua: &'lua Lua,
+    ) -> mlua::Result<TypedFunction<'lua, Params, Response>> {
         Ok(TypedFunction {
             inner: lua.create_function(|_, _: Params| Ok(()))?,
             _p: PhantomData,
@@ -89,7 +110,9 @@ where
     }
 }
 
-
+/// Helper to bake the type information for a lua [`Function`][mlua::Function]. This makes repeated
+/// calls to the [`Function`][mlua::Function]'s [`call`][mlua::Function::call] all the same with
+/// enforced arguments and return types.
 pub struct TypedFunction<'lua, Params, Response>
 where
     Params: TypedMultiValue,
@@ -99,7 +122,6 @@ where
     _p: PhantomData<Params>,
     _r: PhantomData<Response>,
 }
-
 
 impl<'lua, Params, Response> TypedFunction<'lua, Params, Response>
 where
@@ -129,12 +151,12 @@ where
     where
         Params: TypedMultiValue + FromLuaMulti<'lua>,
         Response: TypedMultiValue + IntoLuaMulti<'lua>,
-        F: Fn(&'lua Lua, Params) -> mlua::Result<Response> + MaybeSend + 'static
+        F: Fn(&'lua Lua, Params) -> mlua::Result<Response> + MaybeSend + 'static,
     {
         Ok(Self {
             inner: lua.create_function(func)?,
             _p: PhantomData,
-            _r: PhantomData
+            _r: PhantomData,
         })
     }
 }

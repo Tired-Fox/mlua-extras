@@ -1,15 +1,15 @@
 use mlua::Lua;
-use std::path::PathBuf;
 use mlua_extras::LuaExtras;
+use std::path::PathBuf;
 
 // Use the provided result to have the lua error be reported (printed)
 // in a formatted style.
 //
-// This is because results returned from main are formatted with the `Debug` 
+// This is because results returned from main are formatted with the `Debug`
 // formatter.
 //
 // `mlua::Error` does not format/build the error with `Debug` format but only with `Display`
-// format 
+// format
 fn main() -> mlua_extras::Result<()> {
     let lua = Lua::new();
 
@@ -30,10 +30,13 @@ fn main() -> mlua_extras::Result<()> {
 
     // long hand
     lua.globals().set("key", "value")?;
-    lua.globals().set("hello", lua.create_function(|_lua, _: ()| {
-        println!("Hello, world!");
-        Ok(())
-    })?)?;
+    lua.globals().set(
+        "hello",
+        lua.create_function(|_lua, _: ()| {
+            println!("Hello, world!");
+            Ok(())
+        })?,
+    )?;
 
     lua.load("require 'init'").eval::<mlua::Value>()?;
 

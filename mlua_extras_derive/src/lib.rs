@@ -1,5 +1,3 @@
-//!# MLua Typed Derive
-
 #[macro_use]
 extern crate quote;
 

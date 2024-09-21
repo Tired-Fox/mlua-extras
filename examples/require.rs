@@ -1,5 +1,5 @@
 use mlua::{Function, Lua, Table, UserData, Value, Variadic};
-use mlua_extras::{Require, LuaExtras};
+use mlua_extras::{LuaExtras, Require};
 
 struct MyModule;
 impl UserData for MyModule {

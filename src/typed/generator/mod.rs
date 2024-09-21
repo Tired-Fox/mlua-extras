@@ -7,19 +7,19 @@ use std::{
 use super::{function::IntoTypedFunction, Type, Typed, TypedMultiValue, TypedUserData};
 
 mod type_file;
-pub use type_file::TypeFileGenerator;
+pub use type_file::DefinitionFileGenerator;
 
 /// Representation of a type that is defined in the definition file.
 ///
 /// This type has a name and additional documentation that can be displayed
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
-pub struct DefinitionEntry<'def> {
+pub struct Entry<'def> {
     pub docs: Vec<String>,
     pub name: Cow<'def, str>,
     pub ty: Type,
 }
 
-impl<'def> DefinitionEntry<'def> {
+impl<'def> Entry<'def> {
     /// Create a new definition entry without documentation
     pub fn new(name: impl Into<Cow<'def, str>>, ty: Type) -> Self {
         Self {
@@ -43,58 +43,12 @@ impl<'def> DefinitionEntry<'def> {
     }
 }
 
-/// A named group of definition entries
-///
-/// This is commonly represented as an individual definition file
+/// Builder for definition entries
 #[derive(Default, Debug, Clone)]
-pub struct DefinitionGroup<'def> {
-    pub name: Cow<'def, str>,
-    pub entries: Vec<DefinitionEntry<'def>>,
+pub struct DefinitionBuilder<'def> {
+    pub entries: Vec<Entry<'def>>,
 }
-
-impl<'def> DefinitionGroup<'def> {
-    /// Check if the definition grouping has any entries
-    pub fn is_empty(&self) -> bool {
-        self.entries.is_empty()
-    }
-
-    /// Creat a new named definition entry grouping
-    pub fn new(name: impl Into<Cow<'def, str>>) -> Self {
-        Self {
-            name: name.into(),
-            entries: Vec::default(),
-        }
-    }
-
-    pub fn iter(&self) -> Iter<'def, DefinitionEntry<'_>> {
-        self.entries.iter()
-    }
-}
-
-/// Generate definition entries and definition groups
-pub struct DefinitionGenerator<'def> {
-    definitions: Vec<DefinitionGroup<'def>>,
-    current: DefinitionGroup<'def>,
-}
-impl<'def> Default for DefinitionGenerator<'def> {
-    fn default() -> Self {
-        Self {
-            definitions: Vec::default(),
-            current: DefinitionGroup::new("init"),
-        }
-    }
-}
-impl<'def> DefinitionGenerator<'def> {
-    /// Creat a new named definition group
-    pub fn define(mut self, name: impl Into<Cow<'def, str>>) -> Self {
-        if !self.current.is_empty() {
-            self.definitions.push(self.current);
-        }
-
-        self.current = DefinitionGroup::new(name);
-        self
-    }
-
+impl<'def> DefinitionBuilder<'def> {
     /// Register a definition entry that is a function type
     pub fn function<'lua, Params, Response>(
         mut self,
@@ -105,7 +59,7 @@ impl<'def> DefinitionGenerator<'def> {
         Params: TypedMultiValue,
         Response: TypedMultiValue,
     {
-        self.current.entries.push(DefinitionEntry::new(
+        self.entries.push(Entry::new(
             name,
             Type::function::<Params, Response>(),
         ));
@@ -126,7 +80,7 @@ impl<'def> DefinitionGenerator<'def> {
         Response: TypedMultiValue,
         S: AsRef<str>,
     {
-        self.current.entries.push(DefinitionEntry::new_with(
+        self.entries.push(Entry::new_with(
             name,
             Type::function::<Params, Response>(),
             docs,
@@ -136,9 +90,7 @@ impl<'def> DefinitionGenerator<'def> {
 
     /// Register a definition entry that is an alias type
     pub fn alias(mut self, name: impl Into<Cow<'static, str>>, ty: Type) -> Self {
-        self.current
-            .entries
-            .push(DefinitionEntry::new(name, Type::alias(ty)));
+        self.entries.push(Entry::new(name, Type::alias(ty)));
         self
     }
 
@@ -151,9 +103,7 @@ impl<'def> DefinitionGenerator<'def> {
         ty: Type,
         docs: impl IntoIterator<Item = S>,
     ) -> Self {
-        self.current
-            .entries
-            .push(DefinitionEntry::new_with(name, Type::alias(ty), docs));
+        self.entries.push(Entry::new_with(name, Type::alias(ty), docs));
         self
     }
 
@@ -162,7 +112,7 @@ impl<'def> DefinitionGenerator<'def> {
     /// The name of the class is the same as the name of the type passed
     pub fn register<T: TypedUserData>(mut self) -> Self {
         let name = std::any::type_name::<T>();
-        self.current.entries.push(DefinitionEntry::new(
+        self.entries.push(Entry::new(
             name.rsplit_once("::").map(|v| v.1).unwrap_or(name),
             Type::class::<T>(),
         ));
@@ -174,7 +124,7 @@ impl<'def> DefinitionGenerator<'def> {
         mut self,
         docs: impl IntoIterator<Item = S>,
     ) -> Self {
-        self.current.entries.push(DefinitionEntry::new_with(
+        self.entries.push(Entry::new_with(
             std::any::type_name::<T>(),
             Type::class::<T>(),
             docs,
@@ -211,9 +161,7 @@ impl<'def> DefinitionGenerator<'def> {
     pub fn register_enum<T: Typed>(mut self) -> mlua::Result<Self> {
         match T::ty() {
             Type::Enum(name, types) => {
-                self.current
-                    .entries
-                    .push(DefinitionEntry::new(name.clone(), Type::Enum(name, types)));
+                self.entries.push(Entry::new(name.clone(), Type::Enum(name, types)));
             }
             other => {
                 return Err(mlua::Error::runtime(format!(
@@ -232,7 +180,7 @@ impl<'def> DefinitionGenerator<'def> {
     ) -> mlua::Result<Self> {
         match T::ty() {
             Type::Enum(name, types) => {
-                self.current.entries.push(DefinitionEntry::new_with(
+                self.entries.push(Entry::new_with(
                     name.clone(),
                     Type::Enum(name, types),
                     docs,
@@ -300,9 +248,7 @@ impl<'def> DefinitionGenerator<'def> {
     /// example = nil
     /// ```
     pub fn value<T: Typed>(mut self, name: impl Into<Cow<'static, str>>) -> Self {
-        self.current
-            .entries
-            .push(DefinitionEntry::new(name, Type::Value(Box::new(T::ty()))));
+        self.entries.push(Entry::new(name, Type::Value(Box::new(T::ty()))));
         self
     }
 
@@ -312,17 +258,57 @@ impl<'def> DefinitionGenerator<'def> {
         name: impl Into<Cow<'static, str>>,
         docs: impl IntoIterator<Item = S>,
     ) -> Self {
-        self.current
-            .entries
-            .push(DefinitionEntry::new_with(name, Type::Value(Box::new(T::ty())), docs));
+        self.entries.push(Entry::new_with(
+            name,
+            Type::Value(Box::new(T::ty())),
+            docs,
+        ));
+        self
+    }
+}
+
+/// A named group of definition entries
+///
+/// This is commonly represented as an individual definition file
+#[derive(Default, Debug, Clone)]
+pub struct Definition<'def> {
+    pub name: Cow<'def, str>,
+    pub entries: Vec<Entry<'def>>,
+}
+
+impl<'def> Definition<'def> {
+    pub fn generate() -> DefinitionBuilder<'def> {
+        DefinitionBuilder::default()
+    }
+
+    /// Check if the definition grouping has any entries
+    pub fn is_empty(&self) -> bool {
+        self.entries.is_empty()
+    }
+
+    pub fn iter(&self) -> Iter<'def, Entry<'_>> {
+        self.entries.iter()
+    }
+}
+
+/// Generate definition entries and definition groups
+#[derive(Default)]
+pub struct DefinitionsBuilder<'def> {
+    definitions: Vec<Definition<'def>>,
+}
+
+impl<'def> DefinitionsBuilder<'def> {
+    /// Creat a new named definition group
+    pub fn define(mut self, name: impl Into<Cow<'def, str>>, definition: DefinitionBuilder<'def>) -> Self {
+        self.definitions.push(Definition {
+            name: name.into(),
+            entries: definition.entries
+        });
         self
     }
 
-    pub fn finish(mut self) -> Definitions<'def> {
-        if !self.current.is_empty() {
-            self.definitions.push(self.current);
-        }
-
+    /// Finish defining definition groups and collect them
+    pub fn finish(self) -> Definitions<'def> {
         Definitions {
             definitions: self.definitions,
         }
@@ -332,29 +318,28 @@ impl<'def> DefinitionGenerator<'def> {
 /// A set collection of definition groups
 #[derive(Default, Debug, Clone)]
 pub struct Definitions<'def> {
-    definitions: Vec<DefinitionGroup<'def>>,
+    definitions: Vec<Definition<'def>>,
 }
 
 impl<'def> Definitions<'def> {
     /// Create a definition generator with the given name as the first definition group
-    pub fn generate(initial: impl Into<Cow<'def, str>>) -> DefinitionGenerator<'def> {
-        DefinitionGenerator {
+    pub fn generate() -> DefinitionsBuilder<'def> {
+        DefinitionsBuilder {
             definitions: Vec::default(),
-            current: DefinitionGroup::new(initial),
         }
     }
 
-    pub fn iter(&self) -> Iter<'_, DefinitionGroup<'def>> {
+    pub fn iter(&self) -> Iter<'_, Definition<'def>> {
         self.definitions.iter()
     }
 
-    pub fn iter_mut(&mut self) -> IterMut<'_, DefinitionGroup<'def>> {
+    pub fn iter_mut(&mut self) -> IterMut<'_, Definition<'def>> {
         self.definitions.iter_mut()
     }
 }
 
 impl<'def> IntoIterator for Definitions<'def> {
-    type Item = DefinitionGroup<'def>;
+    type Item = Definition<'def>;
     type IntoIter = IntoIter<Self::Item>;
 
     fn into_iter(self) -> Self::IntoIter {

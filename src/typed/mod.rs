@@ -1,7 +1,10 @@
 mod function;
 pub mod generator;
 
-use std::{borrow::Cow, collections::{BTreeMap, BTreeSet, HashMap, HashSet}};
+use std::{
+    borrow::Cow,
+    collections::{BTreeMap, BTreeSet, HashMap, HashSet},
+};
 
 pub use function::{Param, TypedFunction};
 
@@ -11,17 +14,18 @@ use mlua::{
 };
 
 #[cfg(feature = "send")]
-///used by the `mlua_send` feature
+/// Used by the `send` feature
 pub trait MaybeSend: Send {}
 #[cfg(feature = "send")]
 impl<T: Send> MaybeSend for T {}
 
 #[cfg(not(feature = "send"))]
-///used by the `mlua_send` feature
+/// Used by the `send` feature
 pub trait MaybeSend {}
 #[cfg(not(feature = "send"))]
 impl<T> MaybeSend for T {}
 
+/// Add a lua [`Type`] representation to a rust type
 pub trait Typed {
     /// Get the type representation
     fn ty() -> Type;
@@ -81,6 +85,7 @@ impl_static_typed! {
     f32 | f64 => "number",
     bool => "boolean",
 }
+
 impl_static_typed_generic! {
     for<'a> Cow<'a, str> => "string",
     for<'lua> mlua::Function<'lua> => "fun()",
@@ -99,11 +104,12 @@ impl<T: Typed> Typed for Variadic<T> {
     fn as_param() -> Param {
         Param {
             name: Some("...".into()),
-            ty: T::ty()
+            ty: T::ty(),
         }
     }
 }
 
+/// {type} | nil
 impl<T: Typed> Typed for Option<T> {
     fn ty() -> Type {
         Type::Union(vec![T::ty(), Type::Single("nil".into())])
@@ -128,7 +134,9 @@ impl From<String> for Type {
     }
 }
 
-impl<I: Typed, const N: usize> Typed for [I;N] {
+// Array type
+
+impl<I: Typed, const N: usize> Typed for [I; N] {
     fn ty() -> Type {
         Type::Array(I::ty().into())
     }
@@ -154,6 +162,8 @@ impl<I: Typed> Typed for BTreeSet<I> {
     }
 }
 
+// Map type
+
 impl<K, V> Typed for BTreeMap<K, V>
 where
     K: Typed,
@@ -173,6 +183,7 @@ where
     }
 }
 
+/// Typed variant of [`UserData`][mlua::UserData]
 pub trait TypedUserData: Sized {
     /// Add documentation to the type itself
     #[allow(unused_variables)]
@@ -195,10 +206,12 @@ pub trait TypedUserData: Sized {
     fn add_fields<'lua, F: TypedDataFields<'lua, Self>>(fields: &mut F) {}
 }
 
+/// Used inside of [`TypedUserData`] to add doc comments to the userdata type itself
 pub trait TypedDataDocumentation<T: TypedUserData> {
     fn add(&mut self, doc: &str) -> &mut Self;
 }
 
+/// Typed variant of [`UserDataFields`][mlua::UserDataFields]
 pub trait TypedDataMethods<'lua, T> {
     ///Exposes a method to lua
     fn add_method<S, A, R, M>(&mut self, name: &S, method: M)
@@ -283,6 +296,7 @@ pub trait TypedDataMethods<'lua, T> {
     fn document(&mut self, doc: &str) -> &mut Self;
 }
 
+/// Typed variant of [`UserDataMethods`][mlua::UserDataMethods]
 pub trait TypedDataFields<'lua, T> {
     ///Adds documentation to the next field that gets added
     fn document(&mut self, doc: &str) -> &mut Self;
@@ -345,6 +359,7 @@ pub trait TypedDataFields<'lua, T> {
         R: IntoLua<'lua> + Typed;
 }
 
+/// Representation of a lua type for a rust type
 #[derive(Debug, Clone, PartialEq, strum::AsRefStr, PartialOrd, Eq, Ord)]
 pub enum Type {
     /// string
@@ -362,7 +377,7 @@ pub enum Type {
     Enum(Cow<'static, str>, Vec<Type>),
     /// --- @class {name}
     /// --- @field ...
-    Class(Box<TypeGenerator>),
+    Class(Box<Class>),
     /// { [1]: <type>, [2]: <type>, ...etc }
     Tuple(Vec<Type>),
     Struct(BTreeMap<&'static str, Type>),
@@ -376,6 +391,15 @@ pub enum Type {
     },
 }
 
+/// Allows to union types
+///
+/// # Example
+///
+/// ```
+/// use mlua_extras::typed::Type;
+///
+/// Type::single("string") | Type::single("nil")
+/// ```
 impl std::ops::BitOr for Type {
     type Output = Self;
 
@@ -407,54 +431,69 @@ impl std::ops::BitOr for Type {
 }
 
 impl Type {
+    /// Create a lua type literal for a string. i.e. `"string"`
     pub fn literal_string<T: std::fmt::Display>(value: T) -> Self {
         Self::Single(format!("\"{value}\"").into())
     }
 
+    /// Create a lua type literal from a rust value. i.e. `3`, `true`, etc...
     pub fn literal<T: std::fmt::Display>(value: T) -> Self {
         Self::Single(value.to_string().into())
     }
 
+    /// Create a type that has a single value. i.e. `string`, `number`, etc...
     pub fn single(value: impl Into<Cow<'static, str>>) -> Self {
         Self::Single(value.into())
     }
 
-    pub fn r#enum(name: impl Into<Cow<'static, str>>, types: impl IntoIterator<Item=Type>) -> Self {
+    /// Create an enum type. This is equal to an [`alias`][crate::typed::Type::Alias]
+    pub fn r#enum(
+        name: impl Into<Cow<'static, str>>,
+        types: impl IntoIterator<Item = Type>,
+    ) -> Self {
         Self::Enum(name.into(), types.into_iter().collect())
     }
 
+    /// Create a type that is an alias. i.e. `--- @alias {name} string`
     pub fn alias(ty: Type) -> Self {
         Self::Alias(Box::new(ty))
     }
 
+    /// Create a type that is variadic. i.e. `...type`
     pub fn variadic(ty: Type) -> Self {
         Self::Variadic(Box::new(ty))
     }
 
+    /// Create a type that is an array. i.e. `{ [integer]: type }`
     pub fn array(ty: Type) -> Self {
         Self::Array(Box::new(ty))
     }
 
+    /// Create a type that is a union. i.e. `string | integer | nil`
     pub fn union(types: impl IntoIterator<Item = Type>) -> Self {
         Self::Union(types.into_iter().collect())
     }
 
+    /// create a type that is a tuple. i.e. `{ [1]: type, [2]: type }`
     pub fn tuple(types: impl IntoIterator<Item = Type>) -> Self {
         Self::Tuple(types.into_iter().collect())
     }
 
+    /// create a type that is a class. i.e. `--- @class {name}`
     pub fn class<T: TypedUserData>() -> Self {
-        Self::Class(Box::new(TypeGenerator::new::<T>()))
+        Self::Class(Box::new(Class::new::<T>()))
     }
 
+    /// create a type that is a function. i.e. `fun(self): number`
     pub fn function<Params: TypedMultiValue, Response: TypedMultiValue>() -> Self {
-        Self::Function{
+        Self::Function {
             params: Params::get_types_as_params(),
-            returns: Response::get_types()
+            returns: Response::get_types(),
         }
     }
 }
 
+/// Helper to create a union type
 #[macro_export]
 macro_rules! union {
     ($($typ: expr),*) => {
@@ -462,6 +501,7 @@ macro_rules! union {
     };
 }
 
+/// Typed information for a lua [`MultiValue`][mlua::MultiValue]
 pub trait TypedMultiValue {
     /// Gets the types contained in this collection.
     /// Order *IS* important.
@@ -506,7 +546,7 @@ where
     A: Typed,
 {
     fn get_types_as_params() -> Vec<Param> {
-        Vec::from([A::as_param()])     
+        Vec::from([A::as_param()])
     }
 }
 
@@ -528,24 +568,24 @@ impl_typed_multi_value!(A B);
 impl_typed_multi_value!(A);
 impl_typed_multi_value!();
 
+/// Type information for a lua `class` field
 #[derive(Debug, Clone, PartialEq, PartialOrd, Eq, Ord)]
 pub struct Field {
     pub ty: Type,
-    // PERF: Is it worth embedding luals annotation syntax?
     pub docs: Vec<String>,
 }
 
+/// Type information for a lua `class` function
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Fun {
     pub params: Vec<Param>,
     pub returns: Vec<Type>,
-    // PERF: Is it worth embedding luals annotation syntax?
     pub docs: Vec<String>,
 }
 
+/// Type information for a lua `class`. This happens to be a [`TypedUserData`]
 #[derive(Default, Debug, Clone, PartialEq, PartialOrd, Eq, Ord)]
-pub struct TypeGenerator {
-    // PERF: Is it worth embedding luals annotation syntax?
+pub struct Class {
     pub type_doc: Vec<String>,
     queued_docs: Vec<String>,
 
@@ -558,7 +598,7 @@ pub struct TypeGenerator {
     pub meta_functions: BTreeMap<Cow<'static, str>, Fun>,
 }
 
-impl TypeGenerator {
+impl Class {
     pub fn new<T: TypedUserData>() -> Self {
         let mut gen = Self::default();
         T::add_documentation(&mut gen);
@@ -568,14 +608,14 @@ impl TypeGenerator {
     }
 }
 
-impl<T: TypedUserData> TypedDataDocumentation<T> for TypeGenerator {
+impl<T: TypedUserData> TypedDataDocumentation<T> for Class {
     fn add(&mut self, doc: &str) -> &mut Self {
         self.type_doc.push(doc.to_string());
         self
     }
 }
 
-impl<'lua, T: TypedUserData> TypedDataFields<'lua, T> for TypeGenerator {
+impl<'lua, T: TypedUserData> TypedDataFields<'lua, T> for Class {
     fn document(&mut self, doc: &str) -> &mut Self {
         self.queued_docs.push(doc.to_string());
         self
@@ -735,7 +775,7 @@ impl<'lua, T: TypedUserData> TypedDataFields<'lua, T> for TypeGenerator {
     }
 }
 
-impl<'lua, T: TypedUserData> TypedDataMethods<'lua, T> for TypeGenerator {
+impl<'lua, T: TypedUserData> TypedDataMethods<'lua, T> for Class {
     fn document(&mut self, documentation: &str) -> &mut Self {
         self.queued_docs.push(documentation.to_string());
         self
@@ -923,6 +963,9 @@ impl<'lua, T: TypedUserData> TypedDataMethods<'lua, T> for TypeGenerator {
     }
 }
 
+/// Wrapper around a [`UserDataFields`][mlua::UserDataFields] and [`UserDataMethods`][mlua::UserDataMethods]
+/// to allow [`TypedUserData`] implementations to be used for [`UserData`][mlua::UserData]
+/// implementations
 pub struct WrappedGenerator<'ctx, U>(&'ctx mut U);
 impl<'ctx, U> WrappedGenerator<'ctx, U> {
     pub fn new(u: &'ctx mut U) -> Self {

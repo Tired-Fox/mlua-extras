@@ -3,8 +3,8 @@ use std::path::PathBuf;
 use mlua::{FromLua, Lua, LuaSerdeExt, MetaMethod, UserDataMethods, Value, Variadic};
 use mlua_extras::{
     typed::{
-        generator::{Definitions, TypeFileGenerator},
-        TypedDataFields, TypedDataMethods, TypedFunction, TypedUserData,
+        generator::{Definition, Definitions, DefinitionFileGenerator},
+        TypedDataFields, TypedDataMethods, TypedUserData,
     },
     LuaExtras, Typed, UserData,
 };
@@ -154,13 +154,15 @@ fn main() -> mlua::Result<()> {
 
     // ===== Generate Types and Definition Files =====
 
-    let definitions = Definitions::generate("init")
-        .register_enum::<SystemColor>()?
-        .register_enum::<Color>()?
-        .register::<Example>()
-        .value_with::<Example, _>("example", ["Example module"])
-        .function_with::<String, (), _>("greet", (), ["Greet the name that was passed in"])
-        .function_with::<Color, (), _>("printColor", (), ["Print a color and it's value"])
+    let definitions = Definitions::generate()
+        .define("init", Definition::generate()
+            .register_enum::<SystemColor>()?
+            .register_enum::<Color>()?
+            .register::<Example>()
+            .value_with::<Example, _>("example", ["Example module"])
+            .function_with::<String, (), _>("greet", (), ["Greet the name that was passed in"])
+            .function_with::<Color, (), _>("printColor", (), ["Print a color and it's value"])
+        )
         .finish();
 
     let types_path = PathBuf::from("examples/types");
@@ -168,7 +170,7 @@ fn main() -> mlua::Result<()> {
         std::fs::create_dir_all(&types_path).unwrap();
     }
 
-    let gen = TypeFileGenerator::new(definitions);
+    let gen = DefinitionFileGenerator::new(definitions);
     for (name, writer) in gen.iter() {
         println!("==== Generated \x1b[1;33mexample/types/{name}\x1b[0m ====");
         writer.write_file(types_path.join(name)).unwrap();
@@ -194,8 +196,10 @@ printColor("Blue")
         println!(
             "\x1b[1;36mNOTE\x1b[22;39m This is the default example lua code for the typed example"
         );
-        println!("\x1b[1;36mNOTE\x1b[22;39m create a file at `examles/typed.lua` to run your own code. \
-        LuaLS should pull in the generated `examples/types/init.d.lua` automatically");
+        println!(
+            "\x1b[1;36mNOTE\x1b[22;39m create a file at `examles/typed.lua` to run your own code. \
+        LuaLS should pull in the generated `examples/types/init.d.lua` automatically"
+        );
         println!();
 
         if let Err(err) = lua.load(default).eval::<Value>() {
