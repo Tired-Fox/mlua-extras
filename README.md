@@ -91,7 +91,7 @@ fn main() -> mlua::Result<()> {
     lua.globals().get::<_, Table>("package")?.set("path", format!("?.lua;{path}"))?;
 
     let temp = lua.create_table()?;
-    temp.set("name", "mlua-extras")?;
+    temp.set("getName", lua.create_function(|lua, ()| Ok("name"))?;
 
     // Get a nested function: `table.unpack`
     let unpack = lua.globals().get::<_, Table>("table")?.get::<_, Function>("unpack")?;
@@ -103,7 +103,7 @@ fn main() -> mlua::Result<()> {
 
 ```rust
 use mlua::{Lua, Table, Variadic, Value};
-use mlua_extras::{Require, LuaExtras, typed::TypedFunction};
+use mlua_extras::{Require, LuaExtras, typed::TypedFunction, function};
 
 fn main() -> mlua::Result<()> {
     let lua = Lua::new();
@@ -112,7 +112,11 @@ fn main() -> mlua::Result<()> {
     lua.prepend_path("?.lua")?;
 
     let temp = lua.create_table()?;
-    temp.set("name", "mlua-extras")?;
+    function! {
+        lua fn temp.name(lua) {
+            Ok("name")
+        }
+    }
 
     // Get a nested function: `table.unpack`
     let unpack = lua.require::<TypedFunction<Table, Variadic<Value>>>("table.unpack")?;
