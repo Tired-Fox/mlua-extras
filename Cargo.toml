@@ -2,6 +2,13 @@
 name = "mlua-extras"
 version = "0.1.0"
 edition = "2021"
+license = "MIT OR Apache-2.0"
+author = ["Zachary Boehm <Tired Fox>"]
+description = "Extra helpers and functionality built on top of mlua for embedded lua development"
+readme = "README.md"
+homepage = "https://github.com/Tired-Fox/mlua-extras"
+repository = "https://github.com/Tired-Fox/mlua-extras"
+keywords = ["lua", "types", "mlua"]
 
 [features]
 send = ["mlua/send"]

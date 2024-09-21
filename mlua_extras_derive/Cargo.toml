@@ -5,6 +5,13 @@ proc-macro = true
 name = "mlua-extras-derive"
 version = "0.1.0"
 edition = "2021"
+author = ["Zachary Boehm <Tired Fox>"]
+license = "MIT OR Apache-2.0"
+description = "MLua extras macros"
+readme = "README.md"
+homepage = "https://github.com/Tired-Fox/mlua-extras"
+repository = "https://github.com/Tired-Fox/mlua-extras/tree/main/mlua_extras_derive"
+keywords = ["lua", "types", "mlua", "macros", "derive"]
 
 [dependencies]
 proc-macro-error = "1.0.4"
