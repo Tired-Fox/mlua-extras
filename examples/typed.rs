@@ -1,6 +1,6 @@
-use std::{io::stdout, path::PathBuf};
+use std::path::PathBuf;
 
-use mlua::{FromLua, Lua, MetaMethod, UserDataMethods, Value};
+use mlua::{FromLua, Lua, MetaMethod, UserDataMethods, Value, Variadic};
 use mlua_extras::{
     typed::{
         generator::{Definitions, TypeFileGenerator},
@@ -77,7 +77,7 @@ impl<'lua> FromLua<'lua> for Color {
                                 Ok(v.1 as u8)
                             } else {
                                 Err(mlua::Error::FromLuaConversionError {
-                                    from: "integer",
+                                    from: "table",
                                     to: "Color",
                                     message: Some("rgb colors must be between 0 and 255".into()),
                                 })
@@ -146,6 +146,13 @@ impl TypedUserData for Example {
                 Ok(())
             });
 
+        methods
+            .document("print all items")
+            .add_function("printAll", |_lua, _all: Variadic<String>| {
+                println!("[[ ... ]]");
+                Ok(())
+            });
+
         methods.add_meta_method(MetaMethod::ToString, |_lua, this, ()| { Ok(format!("{this:?}"))});
     }
 }
@@ -163,36 +170,6 @@ fn main() -> mlua::Result<()> {
 
     println!();
 
-    // Example of parsing `Example` as a class
-    //if let Type::Class(name, gen) = Type::class::<Example>("Example") {
-    //    print!("\x1b[38;2;128;128;128m");
-    //    for doc in gen.type_doc.iter() {
-    //        println!("--- {}", doc.split('\n').collect::<Vec<_>>().join("\n---"));
-    //    }
-    //    println!("--- \x1b[36m@class\x1b[33m {name}\x1b[33m\x1b[38;2;128;128;128m");
-    //    for (name, field) in gen.fields.iter() {
-    //        for doc in field.docs.iter() {
-    //            println!("--- {}", doc.split('\n').collect::<Vec<_>>().join("\n---"));
-    //        }
-    //        println!("--- \x1b[36m@field\x1b[38;2;128;128;128m {name} \x1b[33m{}\x1b[38;2;128;128;128m", field.ty.as_ref());
-    //    }
-    //
-    //    for (name, method) in gen.methods.iter() {
-    //        for doc in method.docs.iter() {
-    //            println!("--- {}", doc.split('\n').collect::<Vec<_>>().join("\n---"));
-    //        }
-    //        println!("--- \x1b[36m@field \x1b[38;2;128;128;128m{name} \x1b[35mfun\x1b[39m(\x1b[31mself\x1b[39m{})\x1b[38;2;128;128;128m",
-    //            method.params
-    //                .iter()
-    //                .enumerate()
-    //                .map(|(i, p)| p.name.as_ref().map(|v| v.to_string()).unwrap_or(format!("param{i}")))
-    //                .collect::<Vec<_>>()
-    //                .join(", ")
-    //        );
-    //    }
-    //    print!("\x1b[0m");
-    //}
-
     let definitions = Definitions::generate("init")
         .register::<Example>()
         .register_enum::<Color>()?
@@ -207,9 +184,9 @@ fn main() -> mlua::Result<()> {
     }
 
     let gen = TypeFileGenerator::new(definitions);
-    for (name, definition) in gen.iter() {
+    for (name, writer) in gen.iter() {
         println!("==== \x1b[1;33mexample/types/{name}\x1b[0m ====");
-        definition.write_file(types_path.join(name)).unwrap();
+        writer.write_file(types_path.join(name)).unwrap();
     }
 
     Ok(())

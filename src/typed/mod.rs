@@ -1,13 +1,13 @@
 mod function;
 pub mod generator;
 
-use std::{borrow::Cow, collections::BTreeMap};
+use std::{borrow::Cow, collections::{BTreeMap, BTreeSet, HashMap, HashSet}};
 
 pub use function::{Param, TypedFunction};
 
 use mlua::{
     AnyUserData, FromLua, FromLuaMulti, IntoLua, IntoLuaMulti, Lua, MetaMethod, UserData,
-    UserDataFields, UserDataMethods,
+    UserDataFields, UserDataMethods, Variadic,
 };
 
 #[cfg(feature = "send")]
@@ -88,9 +88,88 @@ impl_static_typed_generic! {
     for<'lua> mlua::String<'lua> => "string",
     for<'lua> mlua::Thread<'lua> => "thread",
 }
+
+impl<T: Typed> Typed for Variadic<T> {
+    /// ...type
+    fn ty() -> Type {
+        Type::Variadic(T::ty().into())
+    }
+
+    /// @param ... type
+    fn as_param() -> Param {
+        Param {
+            name: Some("...".into()),
+            ty: T::ty()
+        }
+    }
+}
+
 impl<T: Typed> Typed for Option<T> {
     fn ty() -> Type {
         Type::Union(vec![T::ty(), Type::Single("nil".into())])
+    }
+}
+
+impl From<&'static str> for Type {
+    fn from(value: &'static str) -> Self {
+        Type::Single(value.into())
+    }
+}
+
+impl From<Cow<'static, str>> for Type {
+    fn from(value: Cow<'static, str>) -> Self {
+        Type::Single(value.clone())
+    }
+}
+
+impl From<String> for Type {
+    fn from(value: String) -> Self {
+        Type::Single(value.into())
+    }
+}
+
+impl<I: Typed, const N: usize> Typed for [I;N] {
+    fn ty() -> Type {
+        Type::Array(I::ty().into())
+    }
+}
+impl<I: Typed> Typed for Vec<I> {
+    fn ty() -> Type {
+        Type::Array(I::ty().into())
+    }
+}
+impl<I: Typed> Typed for &[I] {
+    fn ty() -> Type {
+        Type::Array(I::ty().into())
+    }
+}
+impl<I: Typed> Typed for HashSet<I> {
+    fn ty() -> Type {
+        Type::Array(I::ty().into())
+    }
+}
+impl<I: Typed> Typed for BTreeSet<I> {
+    fn ty() -> Type {
+        Type::Array(I::ty().into())
+    }
+}
+
+impl<K, V> Typed for BTreeMap<K, V>
+where
+    K: Typed,
+    V: Typed,
+{
+    fn ty() -> Type {
+        Type::Map(K::ty().into(), V::ty().into())
+    }
+}
+impl<K, V> Typed for HashMap<K, V>
+where
+    K: Typed,
+    V: Typed,
+{
+    fn ty() -> Type {
+        Type::Map(K::ty().into(), V::ty().into())
     }
 }
 
@@ -289,7 +368,7 @@ pub enum Type {
     Struct(BTreeMap<&'static str, Type>),
     Variadic(Box<Type>),
     Union(Vec<Type>),
-    Array(Vec<Type>),
+    Array(Box<Type>),
     Map(Box<Type>, Box<Type>),
     Function {
         params: Vec<Param>,
@@ -352,8 +431,8 @@ impl Type {
         Self::Variadic(Box::new(ty))
     }
 
-    pub fn array(types: impl IntoIterator<Item = Type>) -> Self {
-        Self::Array(types.into_iter().collect())
+    pub fn array(ty: Type) -> Self {
+        Self::Array(Box::new(ty))
     }
 
     pub fn union(types: impl IntoIterator<Item = Type>) -> Self {
@@ -383,49 +462,18 @@ macro_rules! union {
     };
 }
 
-impl From<&'static str> for Type {
-    fn from(value: &'static str) -> Self {
-        Type::Single(value.into())
-    }
-}
-
-impl From<Cow<'static, str>> for Type {
-    fn from(value: Cow<'static, str>) -> Self {
-        Type::Single(value.clone())
-    }
-}
-
-impl From<String> for Type {
-    fn from(value: String) -> Self {
-        Type::Single(value.into())
-    }
-}
-
-impl<I: Into<Type>, const N: usize> From<[I; N]> for Type {
-    fn from(value: [I; N]) -> Self {
-        Type::Array(value.into_iter().map(|v| v.into()).collect::<Vec<_>>())
-    }
-}
-impl<I: Into<Type>> From<Vec<I>> for Type {
-    fn from(value: Vec<I>) -> Self {
-        Type::Array(value.into_iter().map(|v| v.into()).collect::<Vec<_>>())
-    }
-}
-
 pub trait TypedMultiValue {
     /// Gets the types contained in this collection.
     /// Order *IS* important.
-    fn get_types() -> Vec<Type>;
-    /// Gets the type representations as used for function parameters
-    fn get_types_as_params() -> Vec<Param> {
-        Self::get_types()
-            .iter()
-            .map(|v| Param {
-                name: None,
-                ty: v.clone(),
-            })
+    fn get_types() -> Vec<Type> {
+        Self::get_types_as_params()
+            .into_iter()
+            .map(|v| v.ty)
             .collect::<Vec<_>>()
     }
+
+    /// Gets the type representations as used for function parameters
+    fn get_types_as_params() -> Vec<Param>;
 }
 
 macro_rules! impl_typed_multi_value {
@@ -433,7 +481,7 @@ macro_rules! impl_typed_multi_value {
         impl TypedMultiValue for () {
             #[allow(unused_mut)]
             #[allow(non_snake_case)]
-            fn get_types() -> Vec<Type> {
+            fn get_types_as_params() -> Vec<Param> {
                 Vec::new()
             }
         }
@@ -444,9 +492,9 @@ macro_rules! impl_typed_multi_value {
         {
             #[allow(unused_mut)]
             #[allow(non_snake_case)]
-            fn get_types() -> Vec<Type> {
+            fn get_types_as_params() -> Vec<Param> {
                 Vec::from([
-                    $($name::ty(),)*
+                    $($name::as_param(),)*
                 ])
             }
         }
@@ -457,8 +505,8 @@ impl<A> TypedMultiValue for A
 where
     A: Typed,
 {
-    fn get_types() -> Vec<Type> {
-        Vec::from([A::ty()])
+    fn get_types_as_params() -> Vec<Param> {
+        Vec::from([A::as_param()])     
     }
 }
 

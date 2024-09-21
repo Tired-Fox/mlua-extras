@@ -5,14 +5,17 @@
 --- Example complex type
 --- @field color Color
 local _Class_Example = {
-	--- print the Example userdata
-	--- @param self Example
-	print = function(self) end,
-	__metatable = {
-		--- @param self Example
-		--- @return string
-		__tostring = function(self) end,
-	},
+  --- print all items
+  --- @param ... string
+  printAll = function(...) end,
+  --- print the Example userdata
+  --- @param self Example
+  print = function(self) end,
+  __metatable = {
+    --- @param self Example
+    --- @return string
+    __tostring = function(self) end,
+  }
 }
 
 --- @alias Color "Black"

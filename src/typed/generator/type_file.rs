@@ -89,7 +89,7 @@ pub struct DefinitionWriter<'def> {
 
 impl DefinitionWriter<'_> {
     /// Write the full definition group to a specified file
-    pub fn write_file<P: AsRef<Path>>(&self, path: P) -> std::io::Result<()> {
+    pub fn write_file<P: AsRef<Path>>(&self, path: P) -> mlua::Result<()> {
         let mut file = std::fs::OpenOptions::new()
             .create(true)
             .truncate(true)
@@ -101,10 +101,9 @@ impl DefinitionWriter<'_> {
     /// PERF: Check if there is a good api for adding color when printing to stdout, stderr, etc
     ///
     /// Write the full definition group to the specified `io`
-    pub fn write<W: std::io::Write>(&self, mut buffer: W) -> std::io::Result<()> {
+    pub fn write<W: std::io::Write>(&self, mut buffer: W) -> mlua::Result<()> {
         writeln!(buffer, "--- @meta\n")?;
 
-        // TODO: Iterate the definitions and output the lua code
         for definition in self.definition.iter() {
             match &definition.ty {
                 Type::Value(ty) => {
@@ -112,7 +111,7 @@ impl DefinitionWriter<'_> {
                         writeln!(buffer, "{}", docs.join("\n"))?;
                     }
 
-                    writeln!(buffer, "--- @type {}", Self::type_signature(ty))?;
+                    writeln!(buffer, "--- @type {}", Self::type_signature(ty)?)?;
                     writeln!(buffer, "{} = nil", definition.name)?;
                     writeln!(buffer)?;
                 }
@@ -124,10 +123,6 @@ impl DefinitionWriter<'_> {
                     }
                     writeln!(buffer, "--- @class {}", definition.name)?;
 
-                    // TODO: meta_fields
-                    // TODO: meta_methods
-                    // TODO: meta_functions
-
                     for (name, field) in type_data.static_fields.iter() {
                         if let Some(docs) = Self::accumulate_docs(&[&field.docs]) {
                             writeln!(buffer, "{}", docs.join("\n"))?;
@@ -135,7 +130,7 @@ impl DefinitionWriter<'_> {
                         writeln!(
                             buffer,
                             "--- @field {name} {}",
-                            Self::type_signature(&field.ty)
+                            Self::type_signature(&field.ty)?
                         )?;
                     }
 
@@ -146,7 +141,7 @@ impl DefinitionWriter<'_> {
                         writeln!(
                             buffer,
                             "--- @field {name} {}",
-                            Self::type_signature(&field.ty)
+                            Self::type_signature(&field.ty)?
                         )?;
                     }
 
@@ -162,26 +157,47 @@ impl DefinitionWriter<'_> {
                             if let Some(docs) = Self::accumulate_docs(&[&func.docs]) {
                                 writeln!(buffer, "  {}", docs.join("\n  "))?;
                             }
-                            writeln!(buffer, "  {},", Self::function_signature(name.to_string(), &func.params, &func.returns, true).join("\n  "))?;
+                            writeln!(
+                                buffer,
+                                "  {},",
+                                Self::function_signature(
+                                    name.to_string(),
+                                    &func.params,
+                                    &func.returns,
+                                    true
+                                )?
+                                .join("\n  ")
+                            )?;
                         }
 
                         for (name, func) in type_data.methods.iter() {
                             if let Some(docs) = Self::accumulate_docs(&[&func.docs]) {
                                 writeln!(buffer, "  {}", docs.join("\n  "))?;
                             }
-                            writeln!(buffer, "  {},", Self::method_signature(name.to_string(), definition.name.to_string(), &func.params, &func.returns, true).join("\n  "))?;
+                            writeln!(
+                                buffer,
+                                "  {},",
+                                Self::method_signature(
+                                    name.to_string(),
+                                    definition.name.to_string(),
+                                    &func.params,
+                                    &func.returns,
+                                    true
+                                )?
+                                .join("\n  ")
+                            )?;
                         }
-                        
+
                         if !type_data.meta_fields.is_empty()
                             || !type_data.meta_functions.is_empty()
-                            || !type_data.meta_methods.is_empty() {
-
+                            || !type_data.meta_methods.is_empty()
+                        {
                             writeln!(buffer, "  __metatable = {{")?;
                             for (name, field) in type_data.meta_fields.iter() {
                                 if let Some(docs) = Self::accumulate_docs(&[&field.docs]) {
                                     writeln!(buffer, "    {}", docs.join("\n    "))?;
                                 }
-                                writeln!(buffer, "--- @type {}", Self::type_signature(&field.ty))?;
+                                writeln!(buffer, "--- @type {}", Self::type_signature(&field.ty)?)?;
                                 writeln!(buffer, "{name} = nil,")?;
                             }
 
@@ -189,14 +205,35 @@ impl DefinitionWriter<'_> {
                                 if let Some(docs) = Self::accumulate_docs(&[&func.docs]) {
                                     writeln!(buffer, "    {}", docs.join("\n    "))?;
                                 }
-                                writeln!(buffer, "    {},", Self::function_signature(name.to_string(), &func.params, &func.returns, true).join("\n    "))?;
+                                writeln!(
+                                    buffer,
+                                    "    {},",
+                                    Self::function_signature(
+                                        name.to_string(),
+                                        &func.params,
+                                        &func.returns,
+                                        true
+                                    )?
+                                    .join("\n    ")
+                                )?;
                             }
 
                             for (name, func) in type_data.meta_methods.iter() {
                                 if let Some(docs) = Self::accumulate_docs(&[&func.docs]) {
                                     writeln!(buffer, "    {}", docs.join("\n    "))?;
                                 }
-                                writeln!(buffer, "    {},", Self::method_signature(name.to_string(), definition.name.to_string(), &func.params, &func.returns, true).join("\n    "))?;
+                                writeln!(
+                                    buffer,
+                                    "    {},",
+                                    Self::method_signature(
+                                        name.to_string(),
+                                        definition.name.to_string(),
+                                        &func.params,
+                                        &func.returns,
+                                        true
+                                    )?
+                                    .join("\n    ")
+                                )?;
                             }
                             writeln!(buffer, "  }}")?;
                         }
@@ -216,11 +253,11 @@ impl DefinitionWriter<'_> {
                         types
                             .iter()
                             .map(Self::type_signature)
-                            .collect::<Vec<_>>()
+                            .collect::<mlua::Result<Vec<_>>>()?
                             .join("\n---  | ")
                     )?;
                     writeln!(buffer)?;
-                },
+                }
                 Type::Alias(ty) => {
                     if let Some(docs) = Self::accumulate_docs(&[&definition.docs]) {
                         writeln!(buffer, "{}", docs.join("\n"))?;
@@ -229,7 +266,7 @@ impl DefinitionWriter<'_> {
                         buffer,
                         "--- @alias {} {}",
                         definition.name,
-                        Self::type_signature(ty)
+                        Self::type_signature(ty)?
                     )?;
                     writeln!(buffer)?;
                 }
@@ -237,87 +274,145 @@ impl DefinitionWriter<'_> {
                     if let Some(docs) = Self::accumulate_docs(&[&definition.docs]) {
                         writeln!(buffer, "{}", docs.join("\n"))?;
                     }
-                    writeln!(buffer, "{}", Self::function_signature(definition.name.to_string(), params, returns, false).join("\n"))?;
+                    writeln!(
+                        buffer,
+                        "{}",
+                        Self::function_signature(
+                            definition.name.to_string(),
+                            params,
+                            returns,
+                            false
+                        )?
+                        .join("\n")
+                    )?;
                 }
-                other => unimplemented!("Definition format for `{}`: `{}`", definition.name, other.as_ref()),
+                other => {
+                    return Err(mlua::Error::runtime(format!(
+                        "invalid root level type: {}",
+                        other.as_ref()
+                    )))
+                }
             }
         }
 
         Ok(())
     }
 
-    fn function_signature(name: String, params: &[Param], returns: &[Type], assign: bool) -> Vec<String> {
+    fn function_signature(
+        name: String,
+        params: &[Param],
+        returns: &[Type],
+        assign: bool,
+    ) -> mlua::Result<Vec<String>> {
         let mut result = Vec::new();
 
-        result.extend(params
-            .iter()
-            .enumerate()
-            .map(|(i, v)| format!("--- @param {} {}", v.name.as_ref().map(|v| v.to_string()).unwrap_or(format!("param{i}")), Self::type_signature(&v.ty)))
-            .chain(returns.iter().map(|v| format!("--- @return {}", Self::type_signature(v))))
+        result.extend(
+            params
+                .iter()
+                .enumerate()
+                .map(|(i, v)| {
+                    Ok(format!(
+                        "--- @param {} {}",
+                        v.name
+                            .as_ref()
+                            .map(|v| v.to_string())
+                            .unwrap_or(format!("param{i}")),
+                        Self::type_signature(&v.ty)?
+                    ))
+                })
+                .chain(
+                    returns
+                        .iter()
+                        .map(|v| Ok(format!("--- @return {}", Self::type_signature(v)?))),
+                )
+                .collect::<mlua::Result<Vec<_>>>()?,
         );
-
-
 
         result.push(format!(
             "{}function{}({}) end",
             if assign {
                 format!("{name} = ")
-            } else { String::new() },
+            } else {
+                String::new()
+            },
             if !assign {
                 format!(" {name}")
-            } else { String::new() },
+            } else {
+                String::new()
+            },
             params
                 .iter()
                 .enumerate()
-                .map(|(i, v)| v.name
+                .map(|(i, v)| v
+                    .name
                     .as_ref()
                     .map(|v| v.to_string())
                     .unwrap_or(format!("param{i}")))
                 .collect::<Vec<_>>()
                 .join(", "),
         ));
-        result
+        Ok(result)
     }
 
-    fn method_signature(name: String, class: String, params: &[Param], returns: &[Type], assign: bool) -> Vec<String> {
+    fn method_signature(
+        name: String,
+        class: String,
+        params: &[Param],
+        returns: &[Type],
+        assign: bool,
+    ) -> mlua::Result<Vec<String>> {
         let mut result = Vec::from([format!("--- @param self {class}")]);
-        result.extend(params
-            .iter()
-            .enumerate()
-            .map(|(i, v)| format!("--- @param {} {}", v.name.as_ref().map(|v| v.to_string()).unwrap_or(format!("param{i}")), Self::type_signature(&v.ty)))
-            .chain(returns.iter().map(|v| format!("--- @return {}", Self::type_signature(v))))
+        result.extend(
+            params
+                .iter()
+                .enumerate()
+                .map(|(i, v)| {
+                    Ok(format!(
+                        "--- @param {} {}",
+                        v.name
+                            .as_ref()
+                            .map(|v| v.to_string())
+                            .unwrap_or(format!("param{i}")),
+                        Self::type_signature(&v.ty)?
+                    ))
+                })
+                .chain(
+                    returns
+                        .iter()
+                        .map(|v| Ok(format!("--- @return {}", Self::type_signature(v)?))),
+                )
+                .collect::<mlua::Result<Vec<_>>>()?,
         );
-
-
 
         result.push(format!(
             "{}function{}({}{}) end",
             if assign {
                 format!("{name} = ")
-            } else { String::new() },
+            } else {
+                String::new()
+            },
             if !assign {
                 format!(" {name}")
-            } else { String::new() },
-            if params.is_empty() {
-                "self"
             } else {
-                "self, "
+                String::new()
             },
+            if params.is_empty() { "self" } else { "self, " },
             params
                 .iter()
                 .enumerate()
-                .map(|(i, v)| v.name
+                .map(|(i, v)| v
+                    .name
                     .as_ref()
                     .map(|v| v.to_string())
                     .unwrap_or(format!("param{i}")))
                 .collect::<Vec<_>>()
                 .join(", "),
         ));
-        result
+        Ok(result)
     }
 
-    fn type_signature(ty: &Type) -> String {
-        match ty {
+    fn type_signature(ty: &Type) -> mlua::Result<String> {
+        Ok(match ty {
             Type::Enum(name, _) => name.to_string(),
             Type::Single(value) => value.to_string(),
             Type::Tuple(types) => {
@@ -326,23 +421,82 @@ impl DefinitionWriter<'_> {
                     types
                         .iter()
                         .enumerate()
-                        .map(|(i, t)| { format!("[{}]: {}", i + 1, Self::type_signature(t)) })
-                        .collect::<Vec<_>>()
+                        .map(|(i, t)| Ok(format!("[{}]: {}", i + 1, Self::type_signature(t)?)))
+                        .collect::<mlua::Result<Vec<_>>>()?
                         .join(", ")
                 )
             }
-            other => unimplemented!("Type signature for `{}`", other.as_ref()),
-        }
+            Type::Variadic(ty) => {
+                format!("...{}", Self::type_signature(ty)?)
+            }
+            Type::Array(ty) => {
+                format!("{{ [integer]: {} }}", Self::type_signature(ty)?)
+            }
+            Type::Map(key, value) => {
+                format!(
+                    "{{ [{}]: {} }}",
+                    Self::type_signature(key)?,
+                    Self::type_signature(value)?
+                )
+            }
+            Type::Function { params, returns } => {
+                format!(
+                    "fun({}){}",
+                    params
+                        .iter()
+                        .enumerate()
+                        .map(|(i, v)| {
+                            v.name
+                                .as_ref()
+                                .map(|v| v.to_string())
+                                .unwrap_or(format!("param{i}"))
+                        })
+                        .collect::<Vec<_>>()
+                        .join(", "),
+                    if returns.is_empty() {
+                        String::new()
+                    } else {
+                        format!(
+                            ": {}",
+                            returns
+                                .iter()
+                                .map(Self::type_signature)
+                                .collect::<mlua::Result<Vec<_>>>()?
+                                .join(", ")
+                        )
+                    }
+                )
+            }
+            Type::Union(types) => types
+                .iter()
+                .map(Self::type_signature)
+                .collect::<mlua::Result<Vec<_>>>()?
+                .join(" | "),
+            Type::Struct(entries) => {
+                format!(
+                    "{{ {} }}",
+                    entries
+                        .iter()
+                        .map(|(k, v)| { Ok(format!("{k}: {}", Self::type_signature(v)?)) })
+                        .collect::<mlua::Result<Vec<_>>>()?
+                        .join(", ")
+                )
+            }
+            other => {
+                return Err(mlua::Error::runtime(format!(
+                    "type cannot be a type signature: {}",
+                    other.as_ref()
+                )))
+            }
+        })
     }
 
     fn accumulate_docs(docs: &[&[String]]) -> Option<Vec<String>> {
         let docs = docs.iter().flat_map(|v| *v).collect::<Vec<_>>();
-        (!docs.is_empty())
-            .then_some({
-                docs
-                    .iter()
-                    .flat_map(|v| v.split('\n').map(|v| format!("--- {v}")))
-                    .collect::<Vec<_>>()
-            })
+        (!docs.is_empty()).then_some({
+            docs.iter()
+                .flat_map(|v| v.split('\n').map(|v| format!("--- {v}")))
+                .collect::<Vec<_>>()
+        })
     }
 }
