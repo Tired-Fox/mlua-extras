@@ -130,13 +130,13 @@ where
     Params: TypedMultiValue + IntoLuaMulti<'lua>,
     Response: TypedMultiValue + FromLuaMulti<'lua>,
 {
-    /// Same as [rlua::Function::call](rlua::Function#method.call) but with the param and return
+    /// Same as [Function::call] but with the param and return
     /// types already specified
     pub fn call(&self, params: Params) -> mlua::Result<Response> {
         self.inner.call::<Params, Response>(params)
     }
 
-    /// Same as [rlua::Function::call](rlua::Function#method.call) but with the param and return
+    /// Same as [Function::call] but with the param and return
     /// types already specified
     ///
     /// # Safety
@@ -148,7 +148,7 @@ where
 
     /// Create a typed function from a rust function.
     ///
-    /// This will call [`Lua::create_function`][mlua::Lua::create_function] under the hood
+    /// This will call [`Lua::create_function`] under the hood
     pub fn from_rust<F>(&self, lua: &'lua Lua, func: F) -> mlua::Result<Self>
     where
         Params: TypedMultiValue + FromLuaMulti<'lua>,

@@ -9,7 +9,7 @@ pub use require::Require;
 
 use crate::MaybeSend;
 
-/// Adds quality of life helper methods to the [`Lua`][mlua::Lua] type
+/// Adds quality of life helper methods to the [`Lua`] type
 ///
 /// Helpers:
 /// - [`path`](https://www.lua.org/manual/5.1/manual.html#pdf-package.path) and [`cpath`](https://www.lua.org/manual/5.1/manual.html#pdf-package.cpath) manipulation
@@ -21,32 +21,32 @@ pub trait LuaExtras {
     ///
     /// This is the value used by the lua engine to resolve `require` calls on `lua` files.
     /// see:
-    ///   - https://www.lua.org/manual/5.4/manual.html#pdf-package.path
-    ///   - https://www.lua.org/manual/5.4/manual.html#pdf-package.searchpath
+    ///   - <https://www.lua.org/manual/5.4/manual.html#pdf-package.path>
+    ///   - <https://www.lua.org/manual/5.4/manual.html#pdf-package.searchpath>
     fn path(&self) -> mlua::Result<String>;
 
     /// Get the `package.cpath` value
     ///
     /// This is the value used by the lua engine to resolve `require` calls on `lib` files.
     /// see:
-    ///   - https://www.lua.org/manual/5.4/manual.html#pdf-package.cpath
-    ///   - https://www.lua.org/manual/5.4/manual.html#pdf-package.searchpath
+    ///   - <https://www.lua.org/manual/5.4/manual.html#pdf-package.cpath>
+    ///   - <https://www.lua.org/manual/5.4/manual.html#pdf-package.searchpath>
     fn cpath(&self) -> mlua::Result<String>;
 
     /// Prepend a path tothe `package.path` value
     ///
     /// This is the value used by the lua engine to resolve `require` calls.
     /// see:
-    ///   - https://www.lua.org/manual/5.4/manual.html#pdf-package.path
-    ///   - https://www.lua.org/manual/5.4/manual.html#pdf-package.searchpath
+    ///   - <https://www.lua.org/manual/5.4/manual.html#pdf-package.path>
+    ///   - <https://www.lua.org/manual/5.4/manual.html#pdf-package.searchpath>
     fn prepend_path<S: AsRef<Path>>(&self, path: S) -> mlua::Result<()>;
 
     /// Prepend paths to the `package.path` value
     ///
     /// This is the value used by the lua engine to resolve `require` calls.
     /// see:
-    ///   - https://www.lua.org/manual/5.4/manual.html#pdf-package.path
-    ///   - https://www.lua.org/manual/5.4/manual.html#pdf-package.searchpath
+    ///   - <https://www.lua.org/manual/5.4/manual.html#pdf-package.path>
+    ///   - <https://www.lua.org/manual/5.4/manual.html#pdf-package.searchpath>
     fn prepend_paths<S: AsRef<Path>>(&self, paths: impl IntoIterator<Item = S>)
         -> mlua::Result<()>;
 
@@ -54,48 +54,48 @@ pub trait LuaExtras {
     ///
     /// This is the value used by the lua engine to resolve `require` calls.
     /// see:
-    ///   - https://www.lua.org/manual/5.4/manual.html#pdf-package.path
-    ///   - https://www.lua.org/manual/5.4/manual.html#pdf-package.searchpath
+    ///   - <https://www.lua.org/manual/5.4/manual.html#pdf-package.path>
+    ///   - <https://www.lua.org/manual/5.4/manual.html#pdf-package.searchpath>
     fn append_path<S: AsRef<Path>>(&self, path: S) -> mlua::Result<()>;
 
     /// Append paths to the `package.path` value
     ///
     /// This is the value used by the lua engine to resolve `require` calls.
     /// see:
-    ///   - https://www.lua.org/manual/5.4/manual.html#pdf-package.path
-    ///   - https://www.lua.org/manual/5.4/manual.html#pdf-package.searchpath
+    ///   - <https://www.lua.org/manual/5.4/manual.html#pdf-package.path>
+    ///   - <https://www.lua.org/manual/5.4/manual.html#pdf-package.searchpath>
     fn append_paths<S: AsRef<Path>>(&self, paths: impl IntoIterator<Item = S>) -> mlua::Result<()>;
 
     /// Set the `package.path` value
     ///
     /// This is the value used by the lua engine to resolve `require` calls.
     /// see:
-    ///   - https://www.lua.org/manual/5.4/manual.html#pdf-package.path
-    ///   - https://www.lua.org/manual/5.4/manual.html#pdf-package.searchpath
+    ///   - <https://www.lua.org/manual/5.4/manual.html#pdf-package.path>
+    ///   - <https://www.lua.org/manual/5.4/manual.html#pdf-package.searchpath>
     fn set_path<S: AsRef<Path>>(&self, path: S) -> mlua::Result<()>;
 
     /// Set the `package.path` values
     ///
     /// This is the value used by the lua engine to resolve `require` calls.
     /// see:
-    ///   - https://www.lua.org/manual/5.4/manual.html#pdf-package.path
-    ///   - https://www.lua.org/manual/5.4/manual.html#pdf-package.searchpath
+    ///   - <https://www.lua.org/manual/5.4/manual.html#pdf-package.path>
+    ///   - <https://www.lua.org/manual/5.4/manual.html#pdf-package.searchpath>
     fn set_paths<S: AsRef<Path>>(&self, paths: impl IntoIterator<Item = S>) -> mlua::Result<()>;
 
     /// Prepend a path tothe `package.cpath` value
     ///
     /// This is the value used by the lua engine to resolve `require` calls.
     /// see:
-    ///   - https://www.lua.org/manual/5.4/manual.html#pdf-package.cpath
-    ///   - https://www.lua.org/manual/5.4/manual.html#pdf-package.searchpath
+    ///   - <https://www.lua.org/manual/5.4/manual.html#pdf-package.cpath>
+    ///   - <https://www.lua.org/manual/5.4/manual.html#pdf-package.searchpath>
     fn prepend_cpath<S: AsRef<Path>>(&self, path: S) -> mlua::Result<()>;
 
     /// Prepend paths to the `package.cpath` value
     ///
     /// This is the value used by the lua engine to resolve `require` calls.
     /// see:
-    ///   - https://www.lua.org/manual/5.4/manual.html#pdf-package.cpath
-    ///   - https://www.lua.org/manual/5.4/manual.html#pdf-package.searchpath
+    ///   - <https://www.lua.org/manual/5.4/manual.html#pdf-package.cpath>
+    ///   - <https://www.lua.org/manual/5.4/manual.html#pdf-package.searchpath>
     fn prepend_cpaths<S: AsRef<Path>>(
         &self,
         paths: impl IntoIterator<Item = S>,
@@ -105,16 +105,16 @@ pub trait LuaExtras {
     ///
     /// This is the value used by the lua engine to resolve `require` calls.
     /// see:
-    ///   - https://www.lua.org/manual/5.4/manual.html#pdf-package.cpath
-    ///   - https://www.lua.org/manual/5.4/manual.html#pdf-package.searchpath
+    ///   - <https://www.lua.org/manual/5.4/manual.html#pdf-package.cpath>
+    ///   - <https://www.lua.org/manual/5.4/manual.html#pdf-package.searchpath>
     fn append_cpath<S: AsRef<Path>>(&self, path: S) -> mlua::Result<()>;
 
     /// Append paths to the `package.cpath` value
     ///
     /// This is the value used by the lua engine to resolve `require` calls.
     /// see:
-    ///   - https://www.lua.org/manual/5.4/manual.html#pdf-package.cpath
-    ///   - https://www.lua.org/manual/5.4/manual.html#pdf-package.searchpath
+    ///   - <https://www.lua.org/manual/5.4/manual.html#pdf-package.cpath>
+    ///   - <https://www.lua.org/manual/5.4/manual.html#pdf-package.searchpath>
     fn append_cpaths<S: AsRef<Path>>(&self, paths: impl IntoIterator<Item = S>)
         -> mlua::Result<()>;
 
@@ -122,16 +122,16 @@ pub trait LuaExtras {
     ///
     /// This is the value used by the lua engine to resolve `require` calls.
     /// see:
-    ///   - https://www.lua.org/manual/5.4/manual.html#pdf-package.cpath
-    ///   - https://www.lua.org/manual/5.4/manual.html#pdf-package.searchpath
+    ///   - <https://www.lua.org/manual/5.4/manual.html#pdf-package.cpath>
+    ///   - <https://www.lua.org/manual/5.4/manual.html#pdf-package.searchpath>
     fn set_cpath<S: AsRef<Path>>(&self, path: S) -> mlua::Result<()>;
 
     /// Set the `package.cpath` values
     ///
     /// This is the value used by the lua engine to resolve `require` calls.
     /// see:
-    ///   - https://www.lua.org/manual/5.4/manual.html#pdf-package.cpath
-    ///   - https://www.lua.org/manual/5.4/manual.html#pdf-package.searchpath
+    ///   - <https://www.lua.org/manual/5.4/manual.html#pdf-package.cpath>
+    ///   - <https://www.lua.org/manual/5.4/manual.html#pdf-package.searchpath>
     fn set_cpaths<S: AsRef<Path>>(&self, paths: impl IntoIterator<Item = S>) -> mlua::Result<()>;
 
     /// Set a global variable
