@@ -113,7 +113,6 @@ impl DefinitionWriter<'_> {
 
                     writeln!(buffer, "--- @type {}", Self::type_signature(ty)?)?;
                     writeln!(buffer, "{} = nil", definition.name)?;
-                    writeln!(buffer)?;
                 }
                 Type::Class(type_data) => {
                     if let Some(docs) =
@@ -240,8 +239,6 @@ impl DefinitionWriter<'_> {
 
                         writeln!(buffer, "}}")?;
                     }
-
-                    writeln!(buffer)?;
                 }
                 Type::Enum(name, types) => {
                     if let Some(docs) = Self::accumulate_docs(&[&definition.docs]) {
@@ -256,7 +253,6 @@ impl DefinitionWriter<'_> {
                             .collect::<mlua::Result<Vec<_>>>()?
                             .join("\n---  | ")
                     )?;
-                    writeln!(buffer)?;
                 }
                 Type::Alias(ty) => {
                     if let Some(docs) = Self::accumulate_docs(&[&definition.docs]) {
@@ -268,7 +264,6 @@ impl DefinitionWriter<'_> {
                         definition.name,
                         Self::type_signature(ty)?
                     )?;
-                    writeln!(buffer)?;
                 }
                 Type::Function { params, returns } => {
                     if let Some(docs) = Self::accumulate_docs(&[&definition.docs]) {
@@ -293,6 +288,7 @@ impl DefinitionWriter<'_> {
                     )))
                 }
             }
+            writeln!(buffer)?;
         }
 
         Ok(())

@@ -1,5 +1,18 @@
 --- @meta
 
+--- @alias SystemColor "Black"
+---  | "Red"
+---  | "Green"
+---  | "Yellow"
+---  | "Blue"
+---  | "Cyan"
+---  | "Magenta"
+---  | "White"
+
+--- @alias Color SystemColor
+---  | integer
+---  | { [1]: integer, [2]: integer, [3]: integer }
+
 --- This is a doc comment section for the overall type
 --- @class Example
 --- Example complex type
@@ -8,9 +21,6 @@ local _Class_Example = {
   --- print all items
   --- @param ... string
   printAll = function(...) end,
-  --- print the Example userdata
-  --- @param self Example
-  print = function(self) end,
   __metatable = {
     --- @param self Example
     --- @return string
@@ -18,24 +28,15 @@ local _Class_Example = {
   }
 }
 
---- @alias Color "Black"
----  | "Red"
----  | "Green"
----  | "Yellow"
----  | "Blue"
----  | "Cyan"
----  | "Magenta"
----  | "White"
----  | integer
----  | { [1]: integer, [2]: integer, [3]: integer }
-
 --- Example module
 --- @type Example
 example = nil
 
---- Options
---- @alias options "literal"
-
---- Say hello to someone
+--- Greet the name that was passed in
 --- @param param0 string
-function hello(param0) end
+function greet(param0) end
+
+--- Print a color and it's value
+--- @param param0 Color
+function printColor(param0) end
+

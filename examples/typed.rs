@@ -1,16 +1,17 @@
 use std::path::PathBuf;
 
-use mlua::{FromLua, Lua, MetaMethod, UserDataMethods, Value, Variadic};
+use mlua::{FromLua, Lua, LuaSerdeExt, MetaMethod, UserDataMethods, Value, Variadic};
 use mlua_extras::{
     typed::{
         generator::{Definitions, TypeFileGenerator},
-        Type, TypedDataFields, TypedDataMethods, TypedFunction, TypedUserData,
+        TypedDataFields, TypedDataMethods, TypedFunction, TypedUserData,
     },
     LuaExtras, Typed, UserData,
 };
+use serde::Deserialize;
 
-#[derive(Default, Debug, Typed, UserData, Clone, Copy)]
-enum Color {
+#[derive(Default, Debug, Clone, Copy, Typed, Deserialize)]
+enum SystemColor {
     #[default]
     Black,
     Red,
@@ -20,8 +21,38 @@ enum Color {
     Cyan,
     Magenta,
     White,
+}
+
+#[derive(Debug, Clone, Copy, Typed, UserData, Deserialize)]
+#[serde(untagged)]
+enum Color {
+    System(SystemColor),
     Xterm(u8),
     Rgb(u8, u8, u8),
+}
+impl Default for Color {
+    fn default() -> Self {
+        Color::System(SystemColor::default())
+    }
+}
+
+impl Color {
+    pub fn background_ansi(&self) -> String {
+        match self {
+            Self::System(system) => match system {
+                SystemColor::Black => "\x1b[40m".into(),
+                SystemColor::Red => "\x1b[41m".into(),
+                SystemColor::Green => "\x1b[42m".into(),
+                SystemColor::Yellow => "\x1b[43m".into(),
+                SystemColor::Blue => "\x1b[44m".into(),
+                SystemColor::Magenta => "\x1b[45m".into(),
+                SystemColor::Cyan => "\x1b[46m".into(),
+                SystemColor::White => "\x1b[47m".into(),
+            },
+            Self::Xterm(xterm) => format!("\x1b[48;5;{xterm}m"),
+            Self::Rgb(r, g, b) => format!("\x1b[48;2;{r};{g};{b}m"),
+        }
+    }
 }
 
 impl TypedUserData for Color {
@@ -37,86 +68,34 @@ impl TypedUserData for Color {
 }
 
 impl<'lua> FromLua<'lua> for Color {
-    fn from_lua(value: Value<'lua>, _lua: &'lua Lua) -> mlua::prelude::LuaResult<Self> {
+    fn from_lua(value: Value<'lua>, lua: &'lua Lua) -> mlua::prelude::LuaResult<Self> {
         match value {
-            Value::String(str) => Ok(match str.to_str()?.to_ascii_lowercase().as_str() {
-                "black" => Self::Black,
-                "red" => Self::Red,
-                "green" => Self::Green,
-                "yellow" => Self::Yellow,
-                "blue" => Self::Blue,
-                "cyan" => Self::Cyan,
-                "magenta" => Self::Magenta,
-                "white" => Self::White,
-                other => {
-                    return Err(mlua::Error::FromLuaConversionError {
-                        from: "string",
-                        to: "Color",
-                        message: Some(format!("unknown system color {other}")),
-                    })
-                }
-            }),
-            Value::Integer(v) => {
-                if let 0..=255 = v {
-                    Ok(Self::Xterm(v as u8))
-                } else {
-                    Err(mlua::Error::FromLuaConversionError {
-                        from: "integer",
-                        to: "Color",
-                        message: Some("xterm colors must be between 0 and 255".into()),
-                    })
-                }
-            }
-            Value::Table(tbl) => {
-                let values = tbl
-                    .clone()
-                    .pairs::<mlua::Integer, mlua::Integer>()
-                    .map(|v| {
-                        v.and_then(|v| {
-                            if let 0..=255 = v.1 {
-                                Ok(v.1 as u8)
-                            } else {
-                                Err(mlua::Error::FromLuaConversionError {
-                                    from: "table",
-                                    to: "Color",
-                                    message: Some("rgb colors must be between 0 and 255".into()),
-                                })
-                            }
-                        })
-                    })
-                    .collect::<mlua::Result<Vec<_>>>()?;
-                if values.len() != 3 {
-                    Err(mlua::Error::FromLuaConversionError {
-                        from: "table",
-                        to: "Color",
-                        message: Some("rgb tables must be an array of three integer values".into()),
-                    })
-                } else {
-                    let mut values = values.into_iter();
-                    Ok(Self::Rgb(
-                        values.next().unwrap(),
-                        values.next().unwrap(),
-                        values.next().unwrap(),
-                    ))
-                }
-            }
-            other => Err(mlua::Error::FromLuaConversionError {
-                from: other.type_name(),
-                to: "Color",
-                message: None,
-            }),
+            Value::UserData(data) => data.borrow::<Self>().map(|v| *v),
+            // Use serde deserialize if not userdata
+            other => lua.from_value(other),
         }
     }
 }
 
-#[derive(Default, Debug, UserData, Typed)]
+#[derive(Debug, Clone, Copy, UserData, Typed, Deserialize)]
 struct Example {
     color: Color,
 }
 
+impl Default for Example {
+    fn default() -> Self {
+        Self {
+            color: Color::Rgb(30, 132, 129),
+        }
+    }
+}
+
 impl<'lua> FromLua<'lua> for Example {
-    fn from_lua(_value: Value<'lua>, _lua: &'lua Lua) -> mlua::prelude::LuaResult<Self> {
-        Ok(Example::default())
+    fn from_lua(value: Value<'lua>, lua: &'lua Lua) -> mlua::prelude::LuaResult<Self> {
+        match value {
+            Value::UserData(data) => data.borrow::<Self>().map(|v| *v),
+            other => lua.from_value(other),
+        }
     }
 }
 
@@ -139,43 +118,49 @@ impl TypedUserData for Example {
     }
 
     fn add_methods<'lua, T: TypedDataMethods<'lua, Self>>(methods: &mut T) {
-        methods
-            .document("print the Example userdata")
-            .add_method("print", |_lua, this, _: ()| {
-                println!("{:?}", this.color);
+        methods.document("print all items").add_function(
+            "printAll",
+            |_lua, all: Variadic<String>| {
+                println!(
+                    "{}",
+                    all.iter().map(|v| v.as_str()).collect::<Vec<_>>().join(" ")
+                );
                 Ok(())
-            });
+            },
+        );
 
-        methods
-            .document("print all items")
-            .add_function("printAll", |_lua, _all: Variadic<String>| {
-                println!("[[ ... ]]");
-                Ok(())
-            });
-
-        methods.add_meta_method(MetaMethod::ToString, |_lua, this, ()| { Ok(format!("{this:?}"))});
+        methods.add_meta_method(MetaMethod::ToString, |_lua, this, ()| {
+            Ok(format!("{this:?}"))
+        });
     }
 }
 
 fn main() -> mlua::Result<()> {
     let lua = Lua::new();
 
-    lua.set_global_function("hello", |_lua, name: String| {
+    // ===== Setup Lua Engine =====
+
+    lua.set_global("example", Example::default())?;
+
+    lua.set_global_function("greet", |_lua, name: String| {
         println!("Hello, {name}");
         Ok(())
     })?;
 
-    let hello = lua.require::<TypedFunction<String, ()>>("hello")?;
-    hello.call("steve".into())?;
+    lua.set_global_function("printColor", |_lua, color: Color| {
+        println!("{}      \x1b[0m {color:?}", color.background_ansi());
+        Ok(())
+    })?;
 
-    println!();
+    // ===== Generate Types and Definition Files =====
 
     let definitions = Definitions::generate("init")
-        .register::<Example>()
+        .register_enum::<SystemColor>()?
         .register_enum::<Color>()?
+        .register::<Example>()
         .value_with::<Example, _>("example", ["Example module"])
-        .alias_with("options", Type::literal_string("literal"), ["Options"])
-        .function_with::<String, (), _>("hello", (), ["Say hello to someone"])
+        .function_with::<String, (), _>("greet", (), ["Greet the name that was passed in"])
+        .function_with::<Color, (), _>("printColor", (), ["Print a color and it's value"])
         .finish();
 
     let types_path = PathBuf::from("examples/types");
@@ -185,8 +170,44 @@ fn main() -> mlua::Result<()> {
 
     let gen = TypeFileGenerator::new(definitions);
     for (name, writer) in gen.iter() {
-        println!("==== \x1b[1;33mexample/types/{name}\x1b[0m ====");
+        println!("==== Generated \x1b[1;33mexample/types/{name}\x1b[0m ====");
         writer.write_file(types_path.join(name)).unwrap();
+    }
+    println!();
+
+    // ===== Use a TypedFunction =====
+
+    let hello = lua.require::<TypedFunction<String, ()>>("greet")?;
+    hello.call("steve".into())?;
+
+    println!();
+
+    // ===== Run user defined file... This will default if file doesn't exist =====
+    let default = r#"
+example.printAll("Some", "text", "printed", "with", "a", "single", "space")
+printColor(example.color)
+printColor({ 30, 129, 20 })
+printColor(211)
+printColor("Blue")
+"#;
+
+    let user_file = PathBuf::from("examples/typed.lua");
+
+    if user_file.exists() {
+        if let Err(err) = lua.load(user_file).eval::<Value>() {
+            eprintln!("{err}");
+        }
+    } else {
+        println!(
+            "\x1b[1;36mNOTE\x1b[22;39m This is the default example lua code for the typed example"
+        );
+        println!("\x1b[1;36mNOTE\x1b[22;39m create a file at `examles/typed.lua` to run your own code. \
+        LuaLS should pull in the generated `examples/types/init.d.lua` automatically");
+        println!();
+
+        if let Err(err) = lua.load(default).eval::<Value>() {
+            eprintln!("{err}");
+        }
     }
 
     Ok(())

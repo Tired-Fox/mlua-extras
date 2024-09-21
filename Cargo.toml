@@ -8,13 +8,14 @@ send = ["mlua/send"]
 async = ["mlua/async"]
 
 [dev-dependencies]
-mlua = { version = "0.9.9", features = ["lua54", "vendored"] }
+mlua = { version = "0.9.9", features = ["lua54", "vendored", "serialize"] }
+serde = { version = "1.0.210", features = ["derive"] }
 
 [dependencies]
 # TODO: Update this when the derive crate is pushed
 mlua_extras_derive = { path = "./mlua_extras_derive" }
 
-mlua = { version = "0.9.9", features = ["unstable"] }
+mlua = "0.9.9"
 parking_lot = { version = "0.12.3", features = ["send_guard"] }
 parse = "0.1.2"
 strum = { version = "0.26.3", features = ["derive"] }
