@@ -16,17 +16,19 @@ The biggest part of this library is adding lua type information and doc comments
 
 ## Inspiration
 
-I really enjoy having types when writing my code. However, it can be a pain to write and maintain the types for lua while also writing the rust code and rust types. This is where this libarary comes it. Using ideas from [`Tealr`](https://github.com/lenscas/tealr), this library adds a wrapper around [`mlua`]'s traits and types to automatically get type information and all for doc comments.
+I really enjoy having types information when writing my code. However, it can be a pain to write and maintain the types for lua while also writing the rust code and rust types. This is where this libarary comes in. Using ideas from [`Tealr`](https://github.com/lenscas/tealr), this library adds a wrapper around [`mlua`]'s traits and types to automatically get type information and doc comments for rust types.
 
-Not all the pain is gone as you have to explicitly say which types are going to be used and where. However, it greatly reduces the pain point and keeps the types and documentation close to where the code is written.
+Not all the pain of maintenance is gone as you have to explicitly say which types are going to be used and where. However, it greatly reduces the pain point and keeps the types and documentation close to where the code is written.
 
-The hope is this library will provide an API to generate definition files, lsp addons, and documentation. While we are already creating an API this library also adds some usefull helper traits and macros to make writing rust code for the lua engine much easier.
+The hope is that this library will provide an API to generate definition files, lsp addons, and lua api documentation.
+
+While we are already creating an API this library also adds some usefull helper traits and macros to make writing rust code for the lua engine much easier.
 
 ## Pain Point
 
 There is still one huge pain point with this library. Since it implements traits for the `mlua` crate, it requires that it is a dependency. The `mlua` crate will not compile unless a version of lua is provided. This is bit of problem since it will fail to compile if your project depends on it with one lua version and this crate depends on it with a different version. With this in mind, this crate re-exposes `mlua` and exposes most of it's features. With this the crate can model it's traits and implementations based on how you want to use lua.
 
-Just make sure you use the expose `mlua` crate through this crates API.
+Just make sure you use the exposed `mlua` crate through this crates API.
 
 ## Features
 
