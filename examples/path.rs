@@ -1,5 +1,7 @@
-use mlua::Lua;
-use mlua_extras::LuaExtras;
+use mlua_extras::{
+    extras::LuaExtras,
+    mlua::{self, Lua},
+};
 use std::path::PathBuf;
 
 // Use the provided result to have the lua error be reported (printed)
@@ -10,7 +12,7 @@ use std::path::PathBuf;
 //
 // `mlua::Error` does not format/build the error with `Debug` format but only with `Display`
 // format
-fn main() -> mlua_extras::Result<()> {
+fn main() -> mlua::Result<()> {
     let lua = Lua::new();
 
     // Can prepend, append, or set (override) the paths for mlua

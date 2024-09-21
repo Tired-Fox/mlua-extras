@@ -1,9 +1,12 @@
 use std::path::PathBuf;
 
-use mlua::{Function, Lua, LuaOptions, StdLib, Table, Value};
-use mlua_extras::{function, LuaExtras, Require};
+use mlua_extras::{
+    mlua::{self, Function, Lua, LuaOptions, StdLib, Table, Value},
+    extras::{LuaExtras, Require},
+    function,
+};
 
-fn main() -> mlua_extras::Result<()> {
+fn main() -> mlua::Result<()> {
     let lua = unsafe { Lua::unsafe_new_with(StdLib::ALL, LuaOptions::new()) };
 
     lua.prepend_path(PathBuf::from("examples").join("?").join("init.lua"))?;

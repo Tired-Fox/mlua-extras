@@ -13,17 +13,7 @@ use mlua::{
     UserDataFields, UserDataMethods, Variadic,
 };
 
-#[cfg(feature = "send")]
-/// Used by the `send` feature
-pub trait MaybeSend: Send {}
-#[cfg(feature = "send")]
-impl<T: Send> MaybeSend for T {}
-
-#[cfg(not(feature = "send"))]
-/// Used by the `send` feature
-pub trait MaybeSend {}
-#[cfg(not(feature = "send"))]
-impl<T> MaybeSend for T {}
+use crate::MaybeSend;
 
 /// Add a lua [`Type`] representation to a rust type
 pub trait Typed {

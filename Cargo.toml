@@ -12,30 +12,41 @@ keywords = ["lua", "types", "mlua"]
 
 [features]
 mlua = ["dep:mlua"]
-lua54 = ["mlua/lua54"]
-lua53 = ["mlua/lua53"]
-lua52 = ["mlua/lua52"]
-lua51 = ["mlua/lua51"]
-luajit = ["mlua/luajit"]
-luau = ["mlua/luau"]
-vendored = ["mlua/vendored"]
-serialize = ["mlua/serialize"]
-macros = ["mlua/macros"]
-module = ["mlua/module"]
-send = ["mlua/send"]
-async = ["mlua/async"]
+lua54 = ["mlua/lua54", "mlua"]
+lua53 = ["mlua/lua53", "mlua"]
+lua52 = ["mlua/lua52", "mlua"]
+lua51 = ["mlua/lua51", "mlua"]
+luajit = ["mlua/luajit", "mlua"]
+luau = ["mlua/luau", "mlua"]
+vendored = ["mlua/vendored", "mlua"]
+serialize = ["mlua/serialize", "mlua"]
+macros = ["mlua/macros", "mlua"]
+module = ["mlua/module", "mlua"]
+send = ["mlua/send", "mlua"]
+async = ["mlua/async", "mlua"]
+derive = ["dep:mlua-extras-derive"]
 
 [dev-dependencies]
 serde = { version = "1.0.210", features = ["derive"] }
 
 [dependencies]
-# TODO: Update this when the derive crate is pushed
-mlua-extras-derive = { path = "./mlua_extras_derive", version = "0.0.1" }
+mlua-extras-derive = { path = "./mlua_extras_derive", version = "0.0.1", optional = true }
 
-mlua = { version = "0.9.9", optional = true, default_features = false }
-strum = { version = "0.26.3", features = ["derive"] }
-cfg-if = "1.0.0"
+mlua = { version = "0.9.9", optional = true, default-features = false }
+strum = { version = "0.26.3", features = ["derive"], default-features = false }
+
+[[example]]
+name = "macros"
+required-features = ["mlua"]
+
+[[example]]
+name = "path"
+required-features = ["mlua"]
+
+[[example]]
+name = "require"
+required-features = ["mlua"]
 
 [[example]]
 name = "typed"
-required-features = ["mlua", "serialize"]
+required-features = ["mlua", "derive", "serialize"]

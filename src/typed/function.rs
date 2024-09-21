@@ -2,7 +2,9 @@ use std::{borrow::Cow, marker::PhantomData};
 
 use mlua::{FromLua, FromLuaMulti, Function, IntoLua, IntoLuaMulti, Lua, Value};
 
-use super::{MaybeSend, Type, Typed, TypedMultiValue};
+use crate::MaybeSend;
+
+use super::{Type, Typed, TypedMultiValue};
 
 /// A function parameter type representation
 #[derive(Debug, Clone, PartialEq, PartialOrd, Eq, Ord)]

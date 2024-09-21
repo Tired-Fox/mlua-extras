@@ -1,12 +1,13 @@
 use std::path::PathBuf;
 
-use mlua::{FromLua, Lua, LuaSerdeExt, MetaMethod, UserDataMethods, Value, Variadic};
 use mlua_extras::{
+    mlua::{self, FromLua, Lua, LuaSerdeExt, MetaMethod, UserDataMethods, Value, Variadic},
     typed::{
         generator::{Definition, Definitions, DefinitionFileGenerator},
         TypedDataFields, TypedDataMethods, TypedUserData,
     },
-    LuaExtras, Typed, UserData,
+    extras::LuaExtras,
+    Typed, UserData,
 };
 use serde::Deserialize;
 
