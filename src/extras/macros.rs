@@ -12,7 +12,7 @@
 /// vs
 ///
 /// ```
-/// use mlua::Lua;
+/// use mlua_extras::{mlua::Lua, function};
 ///
 /// let lua = Lua::new();
 /// function! {
@@ -39,8 +39,10 @@
 /// vs
 ///
 /// ```
-/// use mlua::{Lua, Table};
-/// use mlua_extras::{LuaExtras, Require};
+/// use mlua_extras::{
+///     mlua::{Lua, Table},
+///     extras::{LuaExtras, Require},
+/// };
 ///
 /// let lua = Lua::new();
 /// function! {

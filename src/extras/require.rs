@@ -5,8 +5,10 @@ use mlua::{Error, FromLua, Table};
 /// # Example
 ///
 /// ```
-/// use mlua::{Lua, Function};
-/// use mlua_extras::Require;
+/// use mlua_extras::{
+///     mlua::{Lua, Function},
+///     extras::Require,
+/// };
 ///
 /// let lua = Lua::new();
 ///
