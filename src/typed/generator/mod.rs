@@ -119,7 +119,7 @@ impl<'def> DefinitionBuilder<'def> {
         self
     }
 
-    /// Same as [`register`][crate::typed::generator::DefinitionGenerator::register] but with additional docs
+    /// Same as [`register`][DefinitionBuilder::register] but with additional docs
     pub fn register_with<T: TypedUserData, S: AsRef<str>>(
         mut self,
         docs: impl IntoIterator<Item = S>,
@@ -137,7 +137,7 @@ impl<'def> DefinitionBuilder<'def> {
     /// This is equal to an alias, but is usually derived from using the `Typed` derive macro on an
     /// enum object.
     ///
-    /// Returns an error response of [`Error::RuntimeError`][mlua::Error::RuntimeError] if the type extracted was not [`Type::Enum`][crate::typed::Type::Enum]
+    /// Returns an error response of [`Error::RuntimeError`][mlua::Error::RuntimeError] if the type extracted was not [`Type::Enum`]
     ///
     /// # Example
     ///
@@ -173,7 +173,7 @@ impl<'def> DefinitionBuilder<'def> {
         Ok(self)
     }
 
-    /// Same as [`register`][crate::typed::generator::DefinitionGenerator::register_enum] but with additional docs
+    /// Same as [`register`][DefinitionBuilder::register_enum] but with additional docs
     pub fn register_enum_with<T: Typed, S: AsRef<str>>(
         mut self,
         docs: impl IntoIterator<Item = S>,
@@ -252,7 +252,7 @@ impl<'def> DefinitionBuilder<'def> {
         self
     }
 
-    /// Same as [`value`][crate::typed::generator::DefinitionGenerator::value] but with additional docs
+    /// Same as [`value`][DefinitionBuilder::value] but with additional docs
     pub fn value_with<T: Typed, S: AsRef<str>>(
         mut self,
         name: impl Into<Cow<'static, str>>,

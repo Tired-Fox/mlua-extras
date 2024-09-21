@@ -1,6 +1,6 @@
 [package]
 name = "mlua-extras"
-version = "0.0.2"
+version = "0.0.3"
 edition = "2021"
 license = "MIT OR Apache-2.0"
 author = ["Zachary Boehm <Tired Fox>"]
@@ -9,6 +9,9 @@ readme = "README.md"
 homepage = "https://github.com/Tired-Fox/mlua-extras"
 repository = "https://github.com/Tired-Fox/mlua-extras"
 keywords = ["lua", "types", "mlua"]
+
+[package.metadata.docs.rs]
+features = ["mlua", "lua54", "send", "async", "derive"]
 
 [features]
 mlua = ["dep:mlua"]

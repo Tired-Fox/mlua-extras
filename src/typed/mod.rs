@@ -173,25 +173,25 @@ where
     }
 }
 
-/// Typed variant of [`UserData`][mlua::UserData]
+/// Typed variant of [`UserData`]
 pub trait TypedUserData: Sized {
     /// Add documentation to the type itself
     #[allow(unused_variables)]
     fn add_documentation<F: TypedDataDocumentation<Self>>(docs: &mut F) {}
 
-    ///same as [UserData::add_methods](mlua::UserData::add_methods).
+    ///same as [UserData::add_methods].
     ///Refer to its documentation on how to use it.
     ///
-    ///only difference is that it takes a [TypedDataMethods](crate::TypedDataMethods),
-    ///which is the typed version of [UserDataMethods](mlua::UserDataMethods)
+    ///only difference is that it takes a [TypedDataMethods],
+    ///which is the typed version of [UserDataMethods]
     #[allow(unused_variables)]
     fn add_methods<'lua, T: TypedDataMethods<'lua, Self>>(methods: &mut T) {}
 
-    ///same as [UserData::add_fields](mlua::UserData::add_fields).
-    ///Refer to its documentation on how to use it.
+    /// same as [UserData::add_fields].
+    /// Refer to its documentation on how to use it.
     ///
-    ///only difference is that it takes a [TypedDataFields](crate::TypedDataFields),
-    ///which is the typed version of [UserDataFields](mlua::UserDataFields)
+    /// only difference is that it takes a [TypedDataFields],
+    /// which is the typed version of [UserDataFields]
     #[allow(unused_variables)]
     fn add_fields<'lua, F: TypedDataFields<'lua, Self>>(fields: &mut F) {}
 }
@@ -201,7 +201,7 @@ pub trait TypedDataDocumentation<T: TypedUserData> {
     fn add(&mut self, doc: &str) -> &mut Self;
 }
 
-/// Typed variant of [`UserDataFields`][mlua::UserDataFields]
+/// Typed variant of [`UserDataFields`]
 pub trait TypedDataMethods<'lua, T> {
     ///Exposes a method to lua
     fn add_method<S, A, R, M>(&mut self, name: &S, method: M)
@@ -286,7 +286,7 @@ pub trait TypedDataMethods<'lua, T> {
     fn document(&mut self, doc: &str) -> &mut Self;
 }
 
-/// Typed variant of [`UserDataMethods`][mlua::UserDataMethods]
+/// Typed variant of [`UserDataMethods`]
 pub trait TypedDataFields<'lua, T> {
     ///Adds documentation to the next field that gets added
     fn document(&mut self, doc: &str) -> &mut Self;
@@ -484,6 +484,15 @@ impl Type {
 }
 
 /// Helper to create a union type
+///
+/// :NOTE: This is a work in progress macro
+///
+/// # Example
+///
+/// ```
+/// use mlua_extras::{union, typed::Type};
+/// union!("string", "number", "nil", Type::array(Type::single("string")))
+/// ```
 #[macro_export]
 macro_rules! union {
     ($($typ: expr),*) => {
@@ -953,8 +962,8 @@ impl<'lua, T: TypedUserData> TypedDataMethods<'lua, T> for Class {
     }
 }
 
-/// Wrapper around a [`UserDataFields`][mlua::UserDataFields] and [`UserDataMethods`][mlua::UserDataMethods]
-/// to allow [`TypedUserData`] implementations to be used for [`UserData`][mlua::UserData]
+/// Wrapper around a [`UserDataFields`] and [`UserDataMethods`]
+/// to allow [`TypedUserData`] implementations to be used for [`UserData`]
 /// implementations
 pub struct WrappedGenerator<'ctx, U>(&'ctx mut U);
 impl<'ctx, U> WrappedGenerator<'ctx, U> {
