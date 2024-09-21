@@ -2,7 +2,7 @@
 proc-macro = true
 
 [package]
-name = "mlua_extras_derive"
+name = "mlua-extras-derive"
 version = "0.1.0"
 edition = "2021"
 

@@ -173,11 +173,22 @@ name = "mlua-extras"
 version = "0.1.0"
 dependencies = [
  "mlua",
- "mlua_extras_derive",
+ "mlua-extras-derive",
  "parking_lot",
  "parse",
  "serde",
  "strum",
+]
+
+[[package]]
+name = "mlua-extras-derive"
+version = "0.1.0"
+dependencies = [
+ "proc-macro-error",
+ "proc-macro2",
+ "quote",
+ "syn 2.0.77",
+ "venial",
 ]
 
 [[package]]
@@ -191,17 +202,6 @@ dependencies = [
  "lua-src",
  "luajit-src",
  "pkg-config",
-]
-
-[[package]]
-name = "mlua_extras_derive"
-version = "0.1.0"
-dependencies = [
- "proc-macro-error",
- "proc-macro2",
- "quote",
- "syn 2.0.77",
- "venial",
 ]
 
 [[package]]

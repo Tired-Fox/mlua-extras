@@ -13,7 +13,7 @@ serde = { version = "1.0.210", features = ["derive"] }
 
 [dependencies]
 # TODO: Update this when the derive crate is pushed
-mlua_extras_derive = { path = "./mlua_extras_derive" }
+mlua-extras-derive = { path = "./mlua_extras_derive" }
 
 mlua = "0.9.9"
 parking_lot = { version = "0.12.3", features = ["send_guard"] }

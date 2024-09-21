@@ -175,13 +175,6 @@ fn main() -> mlua::Result<()> {
     }
     println!();
 
-    // ===== Use a TypedFunction =====
-
-    let hello = lua.require::<TypedFunction<String, ()>>("greet")?;
-    hello.call("steve".into())?;
-
-    println!();
-
     // ===== Run user defined file... This will default if file doesn't exist =====
     let default = r#"
 example.printAll("Some", "text", "printed", "with", "a", "single", "space")
