@@ -8,7 +8,7 @@ description = "Extra helpers and functionality built on top of mlua for embedded
 readme = "README.md"
 homepage = "https://github.com/Tired-Fox/mlua-extras"
 repository = "https://github.com/Tired-Fox/mlua-extras"
-keywords = ["lua", "types", "mlua"]
+keywords = ["lua", "types", "mlua", "luajit", "luau", "scripting"]
 
 [package.metadata.docs.rs]
 features = ["mlua", "lua54", "send", "async", "derive", "vendored"]

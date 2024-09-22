@@ -1,34 +1,47 @@
 # MLua Extras
 
 > [!WARNING]
-> This crate is under heavy active development. All features are currently experimental and are subject to change partially or fully at any time without notice.
+> This crate is under active development.
+> All features are currently experimental and are subject to change at any time without notice.
 
 > [!NOTE]
-> Feel free to use this crate and start workshopping ideas and features that could be useful.
+> Feel free to use this crate and start working with ideas and features that could be useful.
 >
-> PR's and Changes are welcome; Some topics may inclue API reworks/restruture, additional type information, more type generators, etc...
+> Pull requests and contribution is encouraged
 >
 > If you want to discuss this project, you can do that [here](https://github.com/Tired-Fox/mlua-extras/discussions/1)
 
-Add helpers for common coding styles with [`mlua`](https://docs.rs/mlua/latest/mlua/).
+___
 
-The biggest part of this library is adding lua type information and doc comments. The typing is a light wrapper around [`UserData`](https://docs.rs/mlua/latest/mlua/trait.UserData.html) and its related traits [`UserDataFields`](https://docs.rs/mlua/latest/mlua/trait.UserDataFields.html) and [`UserDataMethods`](https://docs.rs/mlua/latest/mlua/trait.UserDataMethods.html). There is a Definition generator that allows you to group the type definitions (entries), commonly thought of as definition files. From this API a generator for definition files, documentation, or anything else could be built on top. This library will also provide a basic definition file generator.
+The goal of this project is to add a light convenience layer wrapping the [`mlua`](https://docs.rs/mlua/latest/mlua/) crate. The goal isn't to change the way that `mlua` is used, but instead to make `lua` embedded development in `Rust` more enjoyable.
+
+The biggest part of this library is adding Lua type information and doc comments for your exposed Lua APIs. The type information is a light wrapper around [`UserData`](https://docs.rs/mlua/latest/mlua/trait.UserData.html) and its related traits [`UserDataFields`](https://docs.rs/mlua/latest/mlua/trait.UserDataFields.html) and [`UserDataMethods`](https://docs.rs/mlua/latest/mlua/trait.UserDataMethods.html).
 
 ## Inspiration
 
-I really enjoy having types information when writing my code. However, it can be a pain to write and maintain the types for lua while also writing the rust code and rust types. This is where this libarary comes in. Using ideas from [`Tealr`](https://github.com/lenscas/tealr), this library adds a wrapper around [`mlua`]'s traits and types to automatically get type information and doc comments for rust types.
+Lua faces a hurdle where when it is embedded, the additional APIs exposed by the host application are not automatically detected. [`LuaLs`](https://github.com/LuaLS/lua-language-server) handle this very well with support for [`definition files`](https://luals.github.io/wiki/definition-files/) and [`addons`](https://luals.github.io/wiki/addons/). Both options give the opportunity to add additional type information to the language server for the exposed API.
 
-Not all the pain of maintenance is gone as you have to explicitly say which types are going to be used and where. However, it greatly reduces the pain point and keeps the types and documentation close to where the code is written.
+Now for the problem. Writing both rust (host application) code and Lua definition files side by side is a lot of extra work, especially when it comes to translating the rust types into the Lua representation. You may want the definition files to be in the workspace, project, itself or in another location and have it be pulled in with an `addon`. Either way the maintainer would have to write both the rust types and the Lua types.
 
-The hope is that this library will provide an API to generate definition files, lsp addons, and lua api documentation.
+Now for a potential solution. `mlua-extras` adds traits that mimic the `mlua` traits when defining custom types, such as the `UserData` trait. By using the same methods in the format maintainers are familiar with, the additional work is kept minimal. The impact, however, is fairly large. These traits automagically collect the field, parameter, and return type information leveraging the rust type system. With the add a few extra methods to define doc comments, and now the maintained Lua API types are collected and ready to be transformed.
 
-While we are already creating an API this library also adds some usefull helper traits and macros to make writing rust code for the lua engine much easier.
+After collecting the types, a user of `mlua-extras` can transform the type data into definition files or documentation (or a data format used in documentation). So now a maintainer replaces a couple traits and adds a few derive macros and they have their API's type information ready to be used. Effectively writing their expose lua API once.
 
-## Pain Point
+## Why not use `Tealr` or `Luau`?
 
-There is still one huge pain point with this library. Since it implements traits for the `mlua` crate, it requires that it is a dependency. The `mlua` crate will not compile unless a version of lua is provided. This is bit of problem since it will fail to compile if your project depends on it with one lua version and this crate depends on it with a different version. With this in mind, this crate re-exposes `mlua` and exposes most of it's features. With this the crate can model it's traits and implementations based on how you want to use lua.
+`mlua-extras` also doesn't limit the support for a typed syntax of lua. It should work well with any of them and could potentially enhance the users experience with them.
 
-Just make sure you use the exposed `mlua` crate through this crates API.
+Both are great options and if that is what your application needs/wants then use those options. However, using definition files and `luals`'s LuaCATS (Lua Comment And Type System) annotations allows for potentially more portability and usability.
+
+There is no need to learn a new syntax or API, just write Lua and rust code as expected with `mlua`.
+
+Also, by using Lua’s officially supported type system, the latest version of Lua can be used without the worry of compatibility.
+
+## Notice
+
+Since `mlua-extras` implements traits for the `mlua` crate, it requires that it is a dependency. The `mlua` crate will not compile unless a version of Lua is provided. `mlua` will fail to compile if your project depends on it with one Lua version feature and this crate depends on it with a different version feature (ex: `lua54` vs `luajit`). With this in mind, this crate re-exposes `mlua` along with most of its feature flags.
+
+Just make sure you use the exposed `mlua` crate through this crates API (`mlua-extras::mlua`).
 
 ## Features
 
@@ -95,7 +108,25 @@ Just make sure you use the exposed `mlua` crate through this crates API.
     }
     ```
 
-## Example
+## Ideas and Planned Features
+
+- Fully featured definition file generation
+- Fully featured documentation generation
+- Fully featured addon generator when creating a lua modules with `mlua`'s `module` feature
+- Better and more informative type errors associated with lua type definitions and output generation
+- More expresive way of defining exposed lua api types
+    - Generic types
+    - Doc comments for params and return types
+
+## References
+
+- [`lua`](https://www.lua.org/)
+- [`mlua`](https://github.com/mlua-rs/mlua)
+- [`Tealr`](https://github.com/lenscas/tealr)
+- [`Luau`](https://luau.org/)
+- [`Lua Language Server`](https://github.com/LuaLS/lua-language-server)
+
+## Example Syntax
 
 **Helpers**
 
