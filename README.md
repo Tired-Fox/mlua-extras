@@ -114,7 +114,7 @@ Just make sure you use the exposed `mlua` crate through this crates API (`mlua-e
 - Fully featured documentation generation
 - Fully featured addon generator when creating a lua modules with `mlua`'s `module` feature
 - Better and more informative type errors associated with lua type definitions and output generation
-- More expresive way of defining exposed lua api types
+- More expressive way of defining exposed lua api types
     - Generic types
     - Doc comments for params and return types
 
