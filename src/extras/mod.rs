@@ -2,9 +2,11 @@ use std::path::Path;
 
 use mlua::{AnyUserData, FromLua, FromLuaMulti, IntoLua, IntoLuaMulti, Lua, Table, UserDataFields};
 
-mod require;
 mod macros;
+mod module;
+mod require;
 
+pub use module::{LuaModule, Module, ModuleBuilder, ModuleFields, ModuleMethods};
 pub use require::Require;
 
 use crate::MaybeSend;

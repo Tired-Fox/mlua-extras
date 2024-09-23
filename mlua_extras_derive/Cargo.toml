@@ -3,9 +3,9 @@ proc-macro = true
 
 [package]
 name = "mlua-extras-derive"
-version = "0.0.1"
+version = "0.0.2"
 edition = "2021"
-author = ["Zachary Boehm <Tired Fox>"]
+authors = ["Zachary Boehm <Tired Fox>"]
 license = "MIT OR Apache-2.0"
 description = "MLua extras macros"
 readme = "README.md"

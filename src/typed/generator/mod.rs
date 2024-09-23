@@ -2,7 +2,7 @@ use std::{
     borrow::Cow, marker::PhantomData, slice::{Iter, IterMut}, vec::IntoIter
 };
 
-use super::{function::{IntoTypedFunction, Return}, Class, Param, Type, Typed, TypedMultiValue, TypedUserData};
+use super::{function::{IntoTypedFunction, Return}, Param, Type, Typed, TypedClassBuilder, TypedModule, TypedModuleBuilder, TypedMultiValue, TypedUserData};
 
 mod type_file;
 pub use type_file::DefinitionFileGenerator;
@@ -49,11 +49,12 @@ where
     Params: TypedMultiValue,
     Returns: TypedMultiValue,
 {
-    doc: Option<Cow<'static, str>>,
-    params: Vec<Param>,
-    returns: Vec<Return>,
+    pub doc: Option<Cow<'static, str>>,
+    pub params: Vec<Param>,
+    pub returns: Vec<Return>,
     _m: PhantomData<fn(Params) -> Returns>
 }
+
 
 impl<Params, Returns> Default for FunctionBuilder<Params, Returns>
 where
@@ -175,23 +176,50 @@ impl<'def> DefinitionBuilder<'def> {
     /// Register a definition entry that is a class type
     ///
     /// The name of the class is the same as the name of the type passed
-    pub fn register<T: TypedUserData>(mut self) -> Self {
+    pub fn register_class<T: TypedUserData>(mut self) -> Self {
         let name = std::any::type_name::<T>();
         self.entries.push(Entry::new(
             name.rsplit_once("::").map(|v| v.1).unwrap_or(name),
-            Type::class::<T>(),
+            Type::class(TypedClassBuilder::new::<T>()),
         ));
         self
     }
 
-    /// Same as [`register`][DefinitionBuilder::register] but with additional docs
-    pub fn register_with<T: TypedUserData, S: Into<Cow<'def, str>>>(
+    /// Same as [`register_class`][DefinitionBuilder::register_class] but with additional docs
+    pub fn register_class_with<T: TypedUserData, S: Into<Cow<'def, str>>>(
         mut self,
         doc: Option<S>,
     ) -> Self {
         self.entries.push(Entry::new_with(
             std::any::type_name::<T>(),
-            Type::class::<T>(),
+            Type::class(TypedClassBuilder::new::<T>()),
+            doc,
+        ));
+        self
+    }
+
+    /// Register a definition entry that is a class type
+    ///
+    /// The name of the class is the same as the name of the type passed
+    pub fn register_module<T: TypedModule>(mut self, name: impl Into<Cow<'def, str>>) -> Self {
+        self.entries.push(Entry::new(
+            name,
+            // PERF: Ensure that the builder doesn't need it's error bubbled up another layer
+            Type::module(TypedModuleBuilder::new::<T>().unwrap()),
+        ));
+        self
+    }
+
+    /// Same as [`register_module`][DefinitionBuilder::register_module] but with additional docs
+    pub fn register_module_with<T: TypedModule, S: Into<Cow<'def, str>>>(
+        mut self,
+        name: impl Into<Cow<'def, str>>,
+        doc: Option<S>,
+    ) -> Self {
+        self.entries.push(Entry::new_with(
+            name,
+            // PERF: Ensure that the builder doesn't need it's error bubbled up another layer
+            Type::module(TypedModuleBuilder::new::<T>().unwrap()),
             doc,
         ));
         self

@@ -1,5 +1,9 @@
 # CHANGELOG
 
+##### 0.0.5
+
+<!-- TODO: Fill in changes for v0.0.5 -->
+
 ##### 0.0.2
 
 - Restructure library around exporting `mlua`

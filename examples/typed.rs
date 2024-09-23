@@ -160,7 +160,7 @@ fn main() -> mlua::Result<()> {
         .define("init", Definition::start()
             .register_enum::<SystemColor>()?
             .register_enum::<Color>()?
-            .register::<Example>()
+            .register_class::<Example>()
             .value::<Example, _>("example")
             .function::<String, (), _>("greet", ())
             .function::<Color, (), _>("printColor", ())
