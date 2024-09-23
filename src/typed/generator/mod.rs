@@ -1,10 +1,8 @@
 use std::{
-    borrow::Cow,
-    slice::{Iter, IterMut},
-    vec::IntoIter,
+    borrow::Cow, marker::PhantomData, slice::{Iter, IterMut}, vec::IntoIter
 };
 
-use super::{function::IntoTypedFunction, Type, Typed, TypedMultiValue, TypedUserData};
+use super::{function::{IntoTypedFunction, Return}, Class, Param, Type, Typed, TypedMultiValue, TypedUserData};
 
 mod type_file;
 pub use type_file::DefinitionFileGenerator;
@@ -14,7 +12,7 @@ pub use type_file::DefinitionFileGenerator;
 /// This type has a name and additional documentation that can be displayed
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Entry<'def> {
-    pub docs: Vec<String>,
+    pub doc: Option<Cow<'def, str>>,
     pub name: Cow<'def, str>,
     pub ty: Type,
 }
@@ -23,23 +21,86 @@ impl<'def> Entry<'def> {
     /// Create a new definition entry without documentation
     pub fn new(name: impl Into<Cow<'def, str>>, ty: Type) -> Self {
         Self {
-            docs: Vec::default(),
+            doc: None,
             name: name.into(),
             ty,
         }
     }
 
     /// Create a new definition entry with documentation
-    pub fn new_with<S: AsRef<str>>(
+    pub fn new_with<S: Into<Cow<'def, str>>>(
         name: impl Into<Cow<'def, str>>,
         ty: Type,
-        docs: impl IntoIterator<Item = S>,
+        doc: Option<S>,
     ) -> Self {
         Self {
-            docs: docs.into_iter().map(|v| v.as_ref().to_string()).collect(),
+            doc: doc.map(|v| v.into()),
             name: name.into(),
             ty,
         }
+    }
+}
+
+/// Builder to add documentation to parameters and return types along with the overall function
+/// type
+#[derive(Debug, Clone)]
+pub struct FunctionBuilder<Params, Returns>
+where
+    Params: TypedMultiValue,
+    Returns: TypedMultiValue,
+{
+    doc: Option<Cow<'static, str>>,
+    params: Vec<Param>,
+    returns: Vec<Return>,
+    _m: PhantomData<fn(Params) -> Returns>
+}
+
+impl<Params, Returns> Default for FunctionBuilder<Params, Returns>
+where
+    Params: TypedMultiValue,
+    Returns: TypedMultiValue,
+{
+    fn default() -> Self {
+        Self {
+            doc: None,
+            params: Params::get_types_as_params(),
+            returns: Returns::get_types().into_iter().map(|ty| Return { doc: None, ty }).collect(),
+            _m: PhantomData, 
+        }        
+    }
+}
+
+impl<Params, Returns> FunctionBuilder<Params, Returns>
+where
+    Params: TypedMultiValue,
+    Returns: TypedMultiValue,
+{
+    /// Set the doc comment for the function type
+    pub fn document(&mut self, doc: impl Into<Cow<'static, str>>) -> &mut Self {
+        self.doc = Some(doc.into());
+        self
+    }
+
+    /// Update a parameter's information given it's position in the argument list
+    pub fn param<F>(&mut self, index: usize, generator: F) -> &mut Self
+    where
+        F: Fn(&mut Param)
+    {
+        if let Some(param) = self.params.get_mut(index) {
+            generator(param);
+        }
+        self
+    }
+
+    /// Update a return type's information given it's position in the return list
+    pub fn ret<F>(&mut self, index: usize, generator: F) -> &mut Self
+    where
+        F: Fn(&mut Return)
+    {
+        if let Some(ret) = self.returns.get_mut(index) {
+            generator(ret);
+        }
+        self
     }
 }
 
@@ -50,40 +111,43 @@ pub struct DefinitionBuilder<'def> {
 }
 impl<'def> DefinitionBuilder<'def> {
     /// Register a definition entry that is a function type
-    pub fn function<'lua, Params, Response>(
+    pub fn function<'lua, Params, Returns>(
         mut self,
-        name: impl Into<Cow<'static, str>>,
-        _: impl IntoTypedFunction<'lua, Params, Response>,
+        name: impl Into<Cow<'def, str>>,
+        _: impl IntoTypedFunction<'lua, Params, Returns>,
     ) -> Self
     where
         Params: TypedMultiValue,
-        Response: TypedMultiValue,
+        Returns: TypedMultiValue,
     {
-        self.entries.push(Entry::new(
-            name,
-            Type::function::<Params, Response>(),
-        ));
+        self.entries
+            .push(Entry::new(name, Type::function::<Params, Returns>()));
         self
     }
 
     /// Register a definition entry that is a function type
     ///
     /// Also add additional documentation
-    pub fn function_with<'lua, Params, Response, S>(
+    pub fn function_with<'lua, Params, Returns, F>(
         mut self,
-        name: impl Into<Cow<'static, str>>,
-        _: impl IntoTypedFunction<'lua, Params, Response>,
-        docs: impl IntoIterator<Item = S>,
+        name: impl Into<Cow<'def, str>>,
+        _: impl IntoTypedFunction<'lua, Params, Returns>,
+        generator: F
     ) -> Self
     where
         Params: TypedMultiValue,
-        Response: TypedMultiValue,
-        S: AsRef<str>,
+        Returns: TypedMultiValue,
+        F: Fn(&mut FunctionBuilder<Params, Returns>)
     {
+        let mut func = FunctionBuilder::<Params, Returns>::default();
+        generator(&mut func);
         self.entries.push(Entry::new_with(
             name,
-            Type::function::<Params, Response>(),
-            docs,
+            Type::Function {
+                params: func.params,
+                returns: func.returns
+            },
+            func.doc,
         ));
         self
     }
@@ -97,13 +161,14 @@ impl<'def> DefinitionBuilder<'def> {
     /// Register a definition entry that is an alias type
     ///
     /// Also add additional documentation
-    pub fn alias_with<S: AsRef<str>>(
+    pub fn alias_with<S: Into<Cow<'def, str>>>(
         mut self,
-        name: impl Into<Cow<'static, str>>,
+        name: impl Into<Cow<'def, str>>,
         ty: Type,
-        docs: impl IntoIterator<Item = S>,
+        doc: Option<S>,
     ) -> Self {
-        self.entries.push(Entry::new_with(name, Type::alias(ty), docs));
+        self.entries
+            .push(Entry::new_with(name, Type::alias(ty), doc));
         self
     }
 
@@ -120,14 +185,14 @@ impl<'def> DefinitionBuilder<'def> {
     }
 
     /// Same as [`register`][DefinitionBuilder::register] but with additional docs
-    pub fn register_with<T: TypedUserData, S: AsRef<str>>(
+    pub fn register_with<T: TypedUserData, S: Into<Cow<'def, str>>>(
         mut self,
-        docs: impl IntoIterator<Item = S>,
+        doc: Option<S>,
     ) -> Self {
         self.entries.push(Entry::new_with(
             std::any::type_name::<T>(),
             Type::class::<T>(),
-            docs,
+            doc,
         ));
         self
     }
@@ -161,7 +226,8 @@ impl<'def> DefinitionBuilder<'def> {
     pub fn register_enum<T: Typed>(mut self) -> mlua::Result<Self> {
         match T::ty() {
             Type::Enum(name, types) => {
-                self.entries.push(Entry::new(name.clone(), Type::Enum(name, types)));
+                self.entries
+                    .push(Entry::new(name.clone(), Type::Enum(name, types)));
             }
             other => {
                 return Err(mlua::Error::runtime(format!(
@@ -174,17 +240,14 @@ impl<'def> DefinitionBuilder<'def> {
     }
 
     /// Same as [`register`][DefinitionBuilder::register_enum] but with additional docs
-    pub fn register_enum_with<T: Typed, S: AsRef<str>>(
+    pub fn register_enum_with<T: Typed, S: Into<Cow<'def, str>>>(
         mut self,
-        docs: impl IntoIterator<Item = S>,
+        doc: Option<S>,
     ) -> mlua::Result<Self> {
         match T::ty() {
             Type::Enum(name, types) => {
-                self.entries.push(Entry::new_with(
-                    name.clone(),
-                    Type::Enum(name, types),
-                    docs,
-                ));
+                self.entries
+                    .push(Entry::new_with(name.clone(), Type::Enum(name, types), doc));
             }
             other => {
                 return Err(mlua::Error::runtime(format!(
@@ -247,23 +310,28 @@ impl<'def> DefinitionBuilder<'def> {
     /// --- @type Example
     /// example = nil
     /// ```
-    pub fn value<T: Typed>(mut self, name: impl Into<Cow<'static, str>>) -> Self {
-        self.entries.push(Entry::new(name, Type::Value(Box::new(T::ty()))));
+    pub fn value<T: Typed>(mut self, name: impl Into<Cow<'def, str>>) -> Self {
+        self.entries
+            .push(Entry::new(name, Type::Value(Box::new(T::ty()))));
         self
     }
 
     /// Same as [`value`][DefinitionBuilder::value] but with additional docs
-    pub fn value_with<T: Typed, S: AsRef<str>>(
+    pub fn value_with<T: Typed, S: Into<Cow<'def, str>>>(
         mut self,
-        name: impl Into<Cow<'static, str>>,
-        docs: impl IntoIterator<Item = S>,
+        name: impl Into<Cow<'def, str>>,
+        doc: Option<S>,
     ) -> Self {
-        self.entries.push(Entry::new_with(
-            name,
-            Type::Value(Box::new(T::ty())),
-            docs,
-        ));
+        self.entries
+            .push(Entry::new_with(name, Type::Value(Box::new(T::ty())), doc));
         self
+    }
+
+    /// Finish the definition
+    pub fn finish(self) -> Definition<'def> {
+        Definition {
+            entries: self.entries,
+        }
     }
 }
 
@@ -272,12 +340,11 @@ impl<'def> DefinitionBuilder<'def> {
 /// This is commonly represented as an individual definition file
 #[derive(Default, Debug, Clone)]
 pub struct Definition<'def> {
-    pub name: Cow<'def, str>,
     pub entries: Vec<Entry<'def>>,
 }
 
 impl<'def> Definition<'def> {
-    pub fn generate() -> DefinitionBuilder<'def> {
+    pub fn start() -> DefinitionBuilder<'def> {
         DefinitionBuilder::default()
     }
 
@@ -294,16 +361,20 @@ impl<'def> Definition<'def> {
 /// Generate definition entries and definition groups
 #[derive(Default)]
 pub struct DefinitionsBuilder<'def> {
-    definitions: Vec<Definition<'def>>,
+    definitions: Vec<(Cow<'def, str>, Definition<'def>)>,
 }
 
 impl<'def> DefinitionsBuilder<'def> {
     /// Creat a new named definition group
-    pub fn define(mut self, name: impl Into<Cow<'def, str>>, definition: DefinitionBuilder<'def>) -> Self {
-        self.definitions.push(Definition {
-            name: name.into(),
-            entries: definition.entries
-        });
+    pub fn define(
+        mut self,
+        name: impl Into<Cow<'def, str>>,
+        definition: impl Into<Definition<'def>>,
+    ) -> Self {
+        self.definitions.push((
+            name.into(),
+            definition.into(),
+        ));
         self
     }
 
@@ -315,31 +386,39 @@ impl<'def> DefinitionsBuilder<'def> {
     }
 }
 
+impl<'def> From<DefinitionBuilder<'def>> for Definition<'def> {
+    fn from(value: DefinitionBuilder<'def>) -> Self {
+        Definition {
+            entries: value.entries,
+        }
+    }
+}
+
 /// A set collection of definition groups
 #[derive(Default, Debug, Clone)]
 pub struct Definitions<'def> {
-    definitions: Vec<Definition<'def>>,
+    definitions: Vec<(Cow<'def, str>, Definition<'def>)>,
 }
 
 impl<'def> Definitions<'def> {
     /// Create a definition generator with the given name as the first definition group
-    pub fn generate() -> DefinitionsBuilder<'def> {
+    pub fn start() -> DefinitionsBuilder<'def> {
         DefinitionsBuilder {
             definitions: Vec::default(),
         }
     }
 
-    pub fn iter(&self) -> Iter<'_, Definition<'def>> {
+    pub fn iter(&self) -> Iter<'_, (Cow<'def, str>, Definition<'def>)> {
         self.definitions.iter()
     }
 
-    pub fn iter_mut(&mut self) -> IterMut<'_, Definition<'def>> {
+    pub fn iter_mut(&mut self) -> IterMut<'_, (Cow<'def, str>, Definition<'def>)> {
         self.definitions.iter_mut()
     }
 }
 
 impl<'def> IntoIterator for Definitions<'def> {
-    type Item = Definition<'def>;
+    type Item = (Cow<'def, str>, Definition<'def>);
     type IntoIter = IntoIter<Self::Item>;
 
     fn into_iter(self) -> Self::IntoIter {

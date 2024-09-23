@@ -6,6 +6,7 @@ use std::{
     collections::{BTreeMap, BTreeSet, HashMap, HashSet},
 };
 
+use function::Return;
 pub use function::{Param, TypedFunction};
 
 use mlua::{
@@ -23,6 +24,7 @@ pub trait Typed {
     /// Get the type as a function parameter
     fn as_param() -> Param {
         Param {
+            doc: None,
             name: None,
             ty: Self::ty(),
         }
@@ -93,6 +95,7 @@ impl<T: Typed> Typed for Variadic<T> {
     /// @param ... type
     fn as_param() -> Param {
         Param {
+            doc: None,
             name: Some("...".into()),
             ty: T::ty(),
         }
@@ -377,7 +380,7 @@ pub enum Type {
     Map(Box<Type>, Box<Type>),
     Function {
         params: Vec<Param>,
-        returns: Vec<Type>,
+        returns: Vec<Return>,
     },
 }
 
@@ -478,7 +481,7 @@ impl Type {
     pub fn function<Params: TypedMultiValue, Response: TypedMultiValue>() -> Self {
         Self::Function {
             params: Params::get_types_as_params(),
-            returns: Response::get_types(),
+            returns: Response::get_types().into_iter().map(|ty| Return { doc: None, ty }).collect(),
         }
     }
 }
@@ -571,22 +574,22 @@ impl_typed_multi_value!();
 #[derive(Debug, Clone, PartialEq, PartialOrd, Eq, Ord)]
 pub struct Field {
     pub ty: Type,
-    pub docs: Vec<String>,
+    pub doc: Option<Cow<'static, str>>,
 }
 
 /// Type information for a lua `class` function
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Fun {
     pub params: Vec<Param>,
-    pub returns: Vec<Type>,
-    pub docs: Vec<String>,
+    pub returns: Vec<Return>,
+    pub doc: Option<Cow<'static, str>>,
 }
 
 /// Type information for a lua `class`. This happens to be a [`TypedUserData`]
 #[derive(Default, Debug, Clone, PartialEq, PartialOrd, Eq, Ord)]
 pub struct Class {
-    pub type_doc: Vec<String>,
-    queued_docs: Vec<String>,
+    pub type_doc: Option<Cow<'static, str>>,
+    queued_doc: Option<String>,
 
     pub fields: BTreeMap<Cow<'static, str>, Field>,
     pub static_fields: BTreeMap<Cow<'static, str>, Field>,
@@ -609,14 +612,18 @@ impl Class {
 
 impl<T: TypedUserData> TypedDataDocumentation<T> for Class {
     fn add(&mut self, doc: &str) -> &mut Self {
-        self.type_doc.push(doc.to_string());
+        if let Some(type_doc) = self.type_doc.as_mut() {
+            *type_doc = format!("{type_doc}\n{doc}").into()
+        } else {
+            self.type_doc = Some(doc.to_string().into())
+        }
         self
     }
 }
 
 impl<'lua, T: TypedUserData> TypedDataFields<'lua, T> for Class {
     fn document(&mut self, doc: &str) -> &mut Self {
-        self.queued_docs.push(doc.to_string());
+        self.queued_doc = Some(doc.to_string());
         self
     }
 
@@ -628,12 +635,12 @@ impl<'lua, T: TypedUserData> TypedDataFields<'lua, T> for Class {
         self.static_fields
             .entry(name)
             .and_modify(|v| {
-                v.docs.append(&mut self.queued_docs);
+                v.doc = self.queued_doc.take().map(|v| v.into());
                 v.ty = v.ty.clone() | V::ty();
             })
             .or_insert(Field {
                 ty: V::ty(),
-                docs: self.queued_docs.drain(..).collect::<Vec<_>>(),
+                doc: self.queued_doc.take().map(|v| v.into()),
             });
     }
 
@@ -647,12 +654,12 @@ impl<'lua, T: TypedUserData> TypedDataFields<'lua, T> for Class {
         self.static_fields
             .entry(name)
             .and_modify(|v| {
-                v.docs.append(&mut self.queued_docs);
+                v.doc = self.queued_doc.take().map(|v| v.into());
                 v.ty = v.ty.clone() | A::ty();
             })
             .or_insert(Field {
                 ty: A::ty(),
-                docs: self.queued_docs.drain(..).collect::<Vec<_>>(),
+                doc: self.queued_doc.take().map(|v| v.into()),
             });
     }
 
@@ -666,12 +673,12 @@ impl<'lua, T: TypedUserData> TypedDataFields<'lua, T> for Class {
         self.static_fields
             .entry(name)
             .and_modify(|v| {
-                v.docs.append(&mut self.queued_docs);
+                v.doc = self.queued_doc.take().map(|v| v.into());
                 v.ty = v.ty.clone() | R::ty();
             })
             .or_insert(Field {
                 ty: R::ty(),
-                docs: self.queued_docs.drain(..).collect::<Vec<_>>(),
+                doc: self.queued_doc.take().map(|v| v.into()),
             });
     }
 
@@ -687,12 +694,12 @@ impl<'lua, T: TypedUserData> TypedDataFields<'lua, T> for Class {
         self.static_fields
             .entry(name)
             .and_modify(|v| {
-                v.docs.append(&mut self.queued_docs);
+                v.doc = self.queued_doc.take().map(|v| v.into());
                 v.ty = v.ty.clone() | A::ty() | R::ty();
             })
             .or_insert(Field {
                 ty: A::ty() | R::ty(),
-                docs: self.queued_docs.drain(..).collect::<Vec<_>>(),
+                doc: self.queued_doc.take().map(|v| v.into()),
             });
     }
 
@@ -706,12 +713,12 @@ impl<'lua, T: TypedUserData> TypedDataFields<'lua, T> for Class {
         self.fields
             .entry(name)
             .and_modify(|v| {
-                v.docs.append(&mut self.queued_docs);
+                v.doc = self.queued_doc.take().map(|v| v.into());
                 v.ty = v.ty.clone() | A::ty();
             })
             .or_insert(Field {
                 ty: A::ty(),
-                docs: self.queued_docs.drain(..).collect::<Vec<_>>(),
+                doc: self.queued_doc.take().map(|v| v.into()),
             });
     }
 
@@ -725,12 +732,12 @@ impl<'lua, T: TypedUserData> TypedDataFields<'lua, T> for Class {
         self.fields
             .entry(name)
             .and_modify(|v| {
-                v.docs.append(&mut self.queued_docs);
+                v.doc = self.queued_doc.take().map(|v| v.into());
                 v.ty = v.ty.clone() | R::ty();
             })
             .or_insert(Field {
                 ty: R::ty(),
-                docs: self.queued_docs.drain(..).collect::<Vec<_>>(),
+                doc: self.queued_doc.take().map(|v| v.into()),
             });
     }
 
@@ -746,12 +753,12 @@ impl<'lua, T: TypedUserData> TypedDataFields<'lua, T> for Class {
         self.fields
             .entry(name)
             .and_modify(|v| {
-                v.docs.append(&mut self.queued_docs);
+                v.doc = self.queued_doc.take().map(|v| v.into());
                 v.ty = v.ty.clone() | A::ty() | R::ty();
             })
             .or_insert(Field {
                 ty: A::ty() | R::ty(),
-                docs: self.queued_docs.drain(..).collect::<Vec<_>>(),
+                doc: self.queued_doc.take().map(|v| v.into()),
             });
     }
 
@@ -764,19 +771,19 @@ impl<'lua, T: TypedUserData> TypedDataFields<'lua, T> for Class {
         self.meta_fields
             .entry(name)
             .and_modify(|v| {
-                v.docs.append(&mut self.queued_docs);
+                v.doc = self.queued_doc.take().map(|v| v.into());
                 v.ty = v.ty.clone() | R::ty();
             })
             .or_insert(Field {
                 ty: R::ty(),
-                docs: self.queued_docs.drain(..).collect::<Vec<_>>(),
+                doc: self.queued_doc.take().map(|v| v.into()),
             });
     }
 }
 
 impl<'lua, T: TypedUserData> TypedDataMethods<'lua, T> for Class {
     fn document(&mut self, documentation: &str) -> &mut Self {
-        self.queued_docs.push(documentation.to_string());
+        self.queued_doc = Some(documentation.to_string());
         self
     }
 
@@ -792,8 +799,8 @@ impl<'lua, T: TypedUserData> TypedDataMethods<'lua, T> for Class {
             name,
             Fun {
                 params: A::get_types_as_params(),
-                returns: R::get_types(),
-                docs: self.queued_docs.drain(..).collect::<Vec<_>>(),
+                returns: R::get_types().into_iter().map(|ty| Return { doc: None, ty }).collect(),
+                doc: self.queued_doc.take().map(|v| v.into()),
             },
         );
     }
@@ -810,8 +817,8 @@ impl<'lua, T: TypedUserData> TypedDataMethods<'lua, T> for Class {
             name,
             Fun {
                 params: A::get_types_as_params(),
-                returns: R::get_types(),
-                docs: self.queued_docs.drain(..).collect::<Vec<_>>(),
+                returns: R::get_types().into_iter().map(|ty| Return { doc: None, ty }).collect(),
+                doc: self.queued_doc.take().map(|v| v.into()),
             },
         );
     }
@@ -828,8 +835,8 @@ impl<'lua, T: TypedUserData> TypedDataMethods<'lua, T> for Class {
             name,
             Fun {
                 params: A::get_types_as_params(),
-                returns: R::get_types(),
-                docs: self.queued_docs.drain(..).collect::<Vec<_>>(),
+                returns: R::get_types().into_iter().map(|ty| Return { doc: None, ty }).collect(),
+                doc: self.queued_doc.take().map(|v| v.into()),
             },
         );
     }
@@ -845,8 +852,8 @@ impl<'lua, T: TypedUserData> TypedDataMethods<'lua, T> for Class {
             name,
             Fun {
                 params: A::get_types_as_params(),
-                returns: R::get_types(),
-                docs: self.queued_docs.drain(..).collect::<Vec<_>>(),
+                returns: R::get_types().into_iter().map(|ty| Return { doc: None, ty }).collect(),
+                doc: self.queued_doc.take().map(|v| v.into()),
             },
         );
     }
@@ -866,8 +873,8 @@ impl<'lua, T: TypedUserData> TypedDataMethods<'lua, T> for Class {
             name,
             Fun {
                 params: A::get_types_as_params(),
-                returns: R::get_types(),
-                docs: self.queued_docs.drain(..).collect::<Vec<_>>(),
+                returns: R::get_types().into_iter().map(|ty| Return { doc: None, ty }).collect(),
+                doc: self.queued_doc.take().map(|v| v.into()),
             },
         );
     }
@@ -884,8 +891,8 @@ impl<'lua, T: TypedUserData> TypedDataMethods<'lua, T> for Class {
             name,
             Fun {
                 params: A::get_types_as_params(),
-                returns: R::get_types(),
-                docs: self.queued_docs.drain(..).collect::<Vec<_>>(),
+                returns: R::get_types().into_iter().map(|ty| Return { doc: None, ty }).collect(),
+                doc: self.queued_doc.take().map(|v| v.into()),
             },
         );
     }
@@ -901,8 +908,8 @@ impl<'lua, T: TypedUserData> TypedDataMethods<'lua, T> for Class {
             name,
             Fun {
                 params: A::get_types_as_params(),
-                returns: R::get_types(),
-                docs: self.queued_docs.drain(..).collect::<Vec<_>>(),
+                returns: R::get_types().into_iter().map(|ty| Return { doc: None, ty }).collect(),
+                doc: self.queued_doc.take().map(|v| v.into()),
             },
         );
     }
@@ -921,8 +928,8 @@ impl<'lua, T: TypedUserData> TypedDataMethods<'lua, T> for Class {
             name,
             Fun {
                 params: A::get_types_as_params(),
-                returns: R::get_types(),
-                docs: self.queued_docs.drain(..).collect::<Vec<_>>(),
+                returns: R::get_types().into_iter().map(|ty| Return { doc: None, ty }).collect(),
+                doc: self.queued_doc.take().map(|v| v.into()),
             },
         );
     }
@@ -938,8 +945,8 @@ impl<'lua, T: TypedUserData> TypedDataMethods<'lua, T> for Class {
             name,
             Fun {
                 params: A::get_types_as_params(),
-                returns: R::get_types(),
-                docs: self.queued_docs.drain(..).collect::<Vec<_>>(),
+                returns: R::get_types().into_iter().map(|ty| Return { doc: None, ty }).collect(),
+                doc: self.queued_doc.take().map(|v| v.into()),
             },
         );
     }
@@ -955,8 +962,8 @@ impl<'lua, T: TypedUserData> TypedDataMethods<'lua, T> for Class {
             name,
             Fun {
                 params: A::get_types_as_params(),
-                returns: R::get_types(),
-                docs: self.queued_docs.drain(..).collect::<Vec<_>>(),
+                returns: R::get_types().into_iter().map(|ty| Return { doc: None, ty }).collect(),
+                doc: self.queued_doc.take().map(|v| v.into()),
             },
         );
     }
