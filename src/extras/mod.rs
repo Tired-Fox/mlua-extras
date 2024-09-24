@@ -6,7 +6,7 @@ mod macros;
 mod module;
 mod require;
 
-pub use module::{LuaModule, Module, ModuleBuilder, ModuleFields, ModuleMethods};
+pub use module::{LuaModule, Module, ModuleBuilder, ModuleFields, ModuleMethods, ExtendModule};
 pub use require::Require;
 
 use crate::MaybeSend;

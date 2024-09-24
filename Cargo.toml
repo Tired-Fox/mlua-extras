@@ -1,6 +1,6 @@
 [package]
 name = "mlua-extras"
-version = "0.0.5"
+version = "0.0.6"
 edition = "2021"
 license = "MIT OR Apache-2.0"
 authors = ["Zachary Boehm <Tired Fox>"]
@@ -33,7 +33,7 @@ derive = ["dep:mlua-extras-derive"]
 serde = { version = "1.0.210", features = ["derive"] }
 
 [dependencies]
-mlua-extras-derive = { path = "./mlua_extras_derive", version = "0.0.2", optional = true }
+mlua-extras-derive = { path = "./mlua_extras_derive", version = "0.0.3", optional = true }
 
 mlua = { version = "0.9.9", optional = true, default-features = false }
 strum = { version = "0.26.3", features = ["derive"], default-features = false }

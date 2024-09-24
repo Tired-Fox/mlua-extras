@@ -122,7 +122,7 @@ impl DefinitionWriter<'_> {
                     }
                     writeln!(buffer, "--- @class {}", definition.name)?;
 
-                    for (name, field) in type_data.static_fields.iter() {
+                    for (name, field) in type_data.static_fields.iter().filter(|(k, _)| !needs_escape(k.as_ref())) {
                         if let Some(docs) = Self::accumulate_docs(&[field.doc.as_deref()]) {
                             writeln!(buffer, "{}", docs.join("\n"))?;
                         }
@@ -133,7 +133,7 @@ impl DefinitionWriter<'_> {
                         )?;
                     }
 
-                    for (name, field) in type_data.fields.iter() {
+                    for (name, field) in type_data.fields.iter().filter(|(k, _)| !needs_escape(k.as_ref())) {
                         if let Some(docs) = Self::accumulate_docs(&[field.doc.as_deref()]) {
                             writeln!(buffer, "{}", docs.join("\n"))?;
                         }
@@ -144,49 +144,59 @@ impl DefinitionWriter<'_> {
                         )?;
                     }
 
-                    if !type_data.functions.is_empty()
-                        || !type_data.methods.is_empty()
-                        || !type_data.meta_fields.is_empty()
-                        || !type_data.meta_fields.is_empty()
-                        || !type_data.meta_functions.is_empty()
-                        || !type_data.meta_methods.is_empty()
-                    {
-                        writeln!(buffer, "local _Class_{} = {{", definition.name)?;
-                        for (name, func) in type_data.functions.iter() {
-                            if let Some(docs) = Self::accumulate_docs(&[func.doc.as_deref()]) {
-                                writeln!(buffer, "  {}", docs.join("\n  "))?;
-                            }
-                            writeln!(
-                                buffer,
-                                "  {},",
-                                Self::function_signature(
-                                    name.to_string(),
-                                    &func.params,
-                                    &func.returns,
-                                    true
-                                )?
-                                .join("\n  ")
-                            )?;
+                    writeln!(buffer, "local _Class_{} = {{", definition.name)?;
+                    for (name, field) in type_data.static_fields.iter().filter(|(k, _)| needs_escape(k.as_ref())) {
+                        if let Some(docs) = Self::accumulate_docs(&[field.doc.as_deref()]) {
+                            writeln!(buffer, "  {}", docs.join("\n  "))?;
                         }
+                        writeln!(buffer, "  --- @type {}", Self::type_signature(&field.ty)?)?;
+                        writeln!(buffer, "  [\"{name}\"] = nil,")?;
+                    }
 
-                        for (name, func) in type_data.methods.iter() {
-                            if let Some(docs) = Self::accumulate_docs(&[func.doc.as_deref()]) {
-                                writeln!(buffer, "  {}", docs.join("\n  "))?;
-                            }
-                            writeln!(
-                                buffer,
-                                "  {},",
-                                Self::method_signature(
-                                    name.to_string(),
-                                    definition.name.to_string(),
-                                    &func.params,
-                                    &func.returns,
-                                    true
-                                )?
-                                .join("\n  ")
-                            )?;
+                    for (name, field) in type_data.fields.iter().filter(|(k, _)| needs_escape(k.as_ref())) {
+                        if let Some(docs) = Self::accumulate_docs(&[field.doc.as_deref()]) {
+                            writeln!(buffer, "  {}", docs.join("\n  "))?;
                         }
+                        writeln!(buffer, "  --- @type {}", Self::type_signature(&field.ty)?)?;
+                        writeln!(buffer, "  [\"{name}\"] = nil,")?;
+                    }
 
+                    for (name, func) in type_data.functions.iter() {
+                        if let Some(docs) = Self::accumulate_docs(&[func.doc.as_deref()]) {
+                            writeln!(buffer, "  {}", docs.join("\n  "))?;
+                        }
+                        writeln!(
+                            buffer,
+                            "  {},",
+                            Self::function_signature(
+                                escape_key(name.as_ref()),
+                                &func.params,
+                                &func.returns,
+                                true
+                            )?
+                            .join("\n  ")
+                        )?;
+                    }
+
+                    for (name, func) in type_data.methods.iter() {
+                        if let Some(docs) = Self::accumulate_docs(&[func.doc.as_deref()]) {
+                            writeln!(buffer, "  {}", docs.join("\n  "))?;
+                        }
+                        writeln!(
+                            buffer,
+                            "  {},",
+                            Self::method_signature(
+                                escape_key(name.as_ref()),
+                                definition.name.to_string(),
+                                &func.params,
+                                &func.returns,
+                                true
+                            )?
+                            .join("\n  ")
+                        )?;
+                    }
+
+                    if !type_data.is_meta_empty() {
                         if !type_data.meta_fields.is_empty()
                             || !type_data.meta_functions.is_empty()
                             || !type_data.meta_methods.is_empty()
@@ -208,7 +218,7 @@ impl DefinitionWriter<'_> {
                                     buffer,
                                     "    {},",
                                     Self::function_signature(
-                                        name.to_string(),
+                                        escape_key(name.as_ref()),
                                         &func.params,
                                         &func.returns,
                                         true
@@ -225,7 +235,7 @@ impl DefinitionWriter<'_> {
                                     buffer,
                                     "    {},",
                                     Self::method_signature(
-                                        name.to_string(),
+                                        escape_key(name.as_ref()),
                                         definition.name.to_string(),
                                         &func.params,
                                         &func.returns,
@@ -237,8 +247,8 @@ impl DefinitionWriter<'_> {
                             writeln!(buffer, "  }}")?;
                         }
 
-                        writeln!(buffer, "}}")?;
                     }
+                    writeln!(buffer, "}}")?;
                 }
                 Type::Enum(name, types) => {
                     if let Some(docs) = Self::accumulate_docs(&[definition.doc.as_deref()]) {
@@ -273,7 +283,7 @@ impl DefinitionWriter<'_> {
                         buffer,
                         "{}",
                         Self::function_signature(
-                            definition.name.to_string(),
+                            escape_key(definition.name.as_ref()),
                             params,
                             returns,
                             false
@@ -306,8 +316,8 @@ impl DefinitionWriter<'_> {
         Ok(())
     }
 
-    fn function_signature(
-        name: String,
+    fn function_signature<S: std::fmt::Display>(
+        name: S,
         params: &[Param],
         returns: &[Return],
         assign: bool,
@@ -353,8 +363,8 @@ impl DefinitionWriter<'_> {
         Ok(result)
     }
 
-    fn method_signature(
-        name: String,
+    fn method_signature<S: std::fmt::Display>(
+        name: S,
         class: String,
         params: &[Param],
         returns: &[Return],
@@ -462,7 +472,7 @@ impl DefinitionWriter<'_> {
                 .map(Self::type_signature)
                 .collect::<mlua::Result<Vec<_>>>()?
                 .join(" | "),
-            Type::Struct(entries) => {
+            Type::Table(entries) => {
                 format!(
                     "{{ {} }}",
                     entries
@@ -517,7 +527,7 @@ impl DefinitionWriter<'_> {
                 },
                 other => {
                     writeln!(buffer, "{single_offset}--- @type {}", Self::type_signature(other)?)?;
-                    writeln!(buffer, "{single_offset}{name} = nil,", )?
+                    writeln!(buffer, "{single_offset}{name} = nil,")?
                 },
             }
         }
@@ -539,7 +549,7 @@ impl DefinitionWriter<'_> {
                 writeln!(buffer, "{single_offset}{}", docs.join(format!("\n{single_offset}").as_str()))?;
             }
 
-            writeln!(buffer, "{single_offset}{},", Self::function_signature(name.to_string(), &func.params, &func.returns, true)?.join(format!("\n{single_offset}").as_str()))?;
+            writeln!(buffer, "{single_offset}{},", Self::function_signature(name, &func.params, &func.returns, true)?.join(format!("\n{single_offset}").as_str()))?;
         }
 
         for (name, func) in module.methods.iter() {
@@ -547,7 +557,7 @@ impl DefinitionWriter<'_> {
                 writeln!(buffer, "{single_offset}{}", docs.join(format!("\n{single_offset}").as_str()))?;
             }
 
-            writeln!(buffer, "{single_offset}{},", Self::method_signature(name.to_string(), "table".into(), &func.params, &func.returns, true)?.join(format!("\n{single_offset}").as_str()))?;
+            writeln!(buffer, "{single_offset}{},", Self::method_signature(name, "table".into(), &func.params, &func.returns, true)?.join(format!("\n{single_offset}").as_str()))?;
         }
 
         if !module.is_meta_empty() {
@@ -570,7 +580,7 @@ impl DefinitionWriter<'_> {
                     },
                     other => {
                         writeln!(buffer, "{double_offset}--- @type {}", Self::type_signature(other)?)?;
-                        writeln!(buffer, "{double_offset}{name} = nil,", )?
+                        writeln!(buffer, "{double_offset}{name} = nil,")?
                     },
                 }
             }
@@ -580,7 +590,7 @@ impl DefinitionWriter<'_> {
                     writeln!(buffer, "{double_offset}{}", docs.join(format!("\n{double_offset}").as_str()))?;
                 }
 
-                writeln!(buffer, "{double_offset}{},", Self::function_signature(name.to_string(), &func.params, &func.returns, true)?.join(format!("\n{double_offset}").as_str()))?;
+                writeln!(buffer, "{double_offset}{},", Self::function_signature(name, &func.params, &func.returns, true)?.join(format!("\n{double_offset}").as_str()))?;
             }
 
             for (name, func) in module.meta_methods.iter() {
@@ -588,7 +598,7 @@ impl DefinitionWriter<'_> {
                     writeln!(buffer, "{double_offset}{}", docs.join(format!("\n{double_offset}").as_str()))?;
                 }
 
-                writeln!(buffer, "{double_offset}{},", Self::method_signature(name.to_string(), "table".into(), &func.params, &func.returns, true)?.join(format!("\n{double_offset}").as_str()))?;
+                writeln!(buffer, "{double_offset}{},", Self::method_signature(name, "table".into(), &func.params, &func.returns, true)?.join(format!("\n{double_offset}").as_str()))?;
             }
 
             writeln!(buffer, "{single_offset}}},")?;
@@ -597,5 +607,17 @@ impl DefinitionWriter<'_> {
         write!(buffer, "{current_offset}}}")?;
 
         Ok(())
+    }
+}
+
+fn needs_escape(key: &str) -> bool {
+    key.chars().any(|v| !v.is_alphanumeric() && v != '_')
+}
+
+fn escape_key(key: &str) -> String {
+    if needs_escape(key) {
+        format!(r#"["{key}"]"#)
+    } else {
+        key.to_string()
     }
 }

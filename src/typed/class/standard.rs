@@ -29,6 +29,13 @@ impl TypedClassBuilder {
         T::add_methods(&mut gen);
         gen
     }
+
+    /// Check if any of there are any meta fields, functions, or methods present
+    pub fn is_meta_empty(&self) -> bool {
+        self.meta_fields.is_empty()
+            && self.meta_functions.is_empty()
+            && self.meta_methods.is_empty()
+    }
 }
 
 impl<T: TypedUserData> TypedDataDocumentation<T> for TypedClassBuilder {

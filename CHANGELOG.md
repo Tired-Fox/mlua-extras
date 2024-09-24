@@ -1,5 +1,20 @@
 # CHANGELOG
 
+##### 0.0.6
+
+**Features**
+
+- Add the `ExtendModule` trait to allow tables to be extended by the contents created from the `Module` trait
+- Add `Index` enum to handle to handle indexing types
+- Add `lua` lifetime to `add_*_function` and `add_*_method` methods to allow for lua type construction and return. i.e. tables, strings, etc.
+- Definition file generation handles table key escaping. i.e. `[0]` and `["key.name"]`
+- Rename `Type::Struct` to `Type::Table`
+
+**Fixes**
+
+- Typed derive macro using wrong traits
+- Export missing traits and objects
+
 ##### 0.0.5
 
 **Features**

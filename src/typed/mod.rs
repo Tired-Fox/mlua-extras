@@ -6,6 +6,7 @@ mod module;
 
 pub use class::{
     TypedClassBuilder, TypedDataFields, TypedDataMethods, TypedUserData, WrappedBuilder,
+    TypedDataDocumentation,
 };
 pub use module::{TypedModule, TypedModuleBuilder, TypedModuleFields, TypedModuleMethods};
 
@@ -17,7 +18,7 @@ use std::{
 use function::Return;
 pub use function::{Param, TypedFunction};
 
-use mlua::Variadic;
+use mlua::{IntoLua, MetaMethod, Value, Variadic};
 
 /// Add a lua [`Type`] representation to a rust type
 pub trait Typed {
@@ -84,9 +85,16 @@ impl_static_typed! {
 impl_static_typed_generic! {
     for<'a> Cow<'a, str> => "string",
     for<'lua> mlua::Function<'lua> => "fun()",
+    for<'lua> mlua::Table<'lua> => "table",
     for<'lua> mlua::AnyUserData<'lua> => "userdata",
     for<'lua> mlua::String<'lua> => "string",
     for<'lua> mlua::Thread<'lua> => "thread",
+}
+
+impl<'lua> Typed for Value<'lua> {
+    fn ty() -> Type {
+        Type::single("any")
+    }
 }
 
 impl<T: Typed> Typed for Variadic<T> {
@@ -179,8 +187,60 @@ where
     }
 }
 
+#[derive(Debug, Clone, PartialEq, PartialOrd, Eq, Ord, Hash)]
+pub enum Index {
+    Int(usize),
+    Str(Cow<'static, str>),
+}
+
+impl std::fmt::Display for Index {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Int(num) => write!(f, "[{num}]"),
+            Self::Str(val) => if val.chars().any(|v| !v.is_alphanumeric() && v != '_') {
+                write!(f, r#"["{val}"]"#)
+            } else {
+                write!(f, "{val}")
+            }
+        }
+    }
+}
+
+impl<'lua> IntoLua<'lua> for Index {
+    fn into_lua(self, lua: &'lua mlua::Lua) -> mlua::prelude::LuaResult<Value<'lua>> {
+        match self {
+            Self::Int(num) => Ok(mlua::Value::Integer(num as mlua::Integer)),
+            Self::Str(val) => val.into_lua(lua)
+        }
+    }
+}
+
+impl From<MetaMethod> for Index {
+    fn from(value: MetaMethod) -> Self {
+        Self::Str(value.as_ref().to_string().into())
+    }
+}
+
+impl From<&'static str> for Index {
+    fn from(value: &'static str) -> Self {
+        Self::Str(value.into())
+    }
+}
+
+impl From<String> for Index {
+    fn from(value: String) -> Self {
+        Self::Str(value.into())
+    }
+}
+
+impl From<usize> for Index {
+    fn from(value: usize) -> Self {
+        Self::Int(value)
+    }
+}
+
 /// Representation of a lua type for a rust type
-#[derive(Debug, Clone, PartialEq, strum::AsRefStr, PartialOrd, Eq, Ord)]
+#[derive(Debug, Clone, PartialEq, strum::AsRefStr, strum::EnumIs, PartialOrd, Eq, Ord)]
 pub enum Type {
     /// string
     /// nil
@@ -192,6 +252,17 @@ pub enum Type {
     Value(Box<Type>),
     /// --- @alias {name} <type>
     Alias(Box<Type>),
+    /// { [1]: <type>, [2]: <type>, ...etc }
+    Tuple(Vec<Type>),
+    Table(BTreeMap<Index, Type>),
+    Variadic(Box<Type>),
+    Union(Vec<Type>),
+    Array(Box<Type>),
+    Map(Box<Type>, Box<Type>),
+    Function {
+        params: Vec<Param>,
+        returns: Vec<Return>,
+    },
     /// Same as alias but with a set name predefined
     /// --- @alias {name} <type>
     Enum(Cow<'static, str>, Vec<Type>),
@@ -213,17 +284,6 @@ pub enum Type {
     /// module.data = nil
     /// ```
     Module(Box<TypedModuleBuilder>),
-    /// { [1]: <type>, [2]: <type>, ...etc }
-    Tuple(Vec<Type>),
-    Struct(BTreeMap<&'static str, Type>),
-    Variadic(Box<Type>),
-    Union(Vec<Type>),
-    Array(Box<Type>),
-    Map(Box<Type>, Box<Type>),
-    Function {
-        params: Vec<Param>,
-        returns: Vec<Return>,
-    },
 }
 
 /// Allows to union types
@@ -304,6 +364,11 @@ impl Type {
         Self::Array(Box::new(ty))
     }
 
+    /// Create a type that is an array. i.e. `{ [integer]: type }`
+    pub fn map(key: Type, value: Type) -> Self {
+        Self::Map(Box::new(key), Box::new(value))
+    }
+
     /// Create a type that is a union. i.e. `string | integer | nil`
     pub fn union(types: impl IntoIterator<Item = Type>) -> Self {
         Self::Union(types.into_iter().collect())
@@ -333,6 +398,13 @@ impl Type {
                 .map(|ty| Return { doc: None, ty })
                 .collect(),
         }
+    }
+
+    /// A table that has defined entries.
+    ///
+    /// If the goal is a map like syntax use [`Type::Map`] or [`Type::map`] instead
+    pub fn table(items: impl IntoIterator<Item=(Index, Type)>) -> Self {
+        Self::Table(items.into_iter().collect())
     }
 }
 

@@ -1,6 +1,6 @@
 use std::{any::type_name, marker::PhantomData};
 
-use mlua::{FromLuaMulti, IntoLua, IntoLuaMulti};
+use mlua::{FromLuaMulti, IntoLua, IntoLuaMulti, Lua, Table};
 
 use crate::MaybeSend;
 
@@ -21,6 +21,30 @@ impl<'lua, M: Module> IntoLua<'lua> for LuaModule<M> {
         M::add_methods(&mut builder)?;
 
         Ok(mlua::Value::Table(builder.table))
+    }
+}
+
+/// Extend the contents of a table (module) with the contents of a [`Module`]
+///
+/// Instead of creating a new table when initializing and calling [`Module`] it will use the
+/// given parent as the source to add it's fields, functions, and methods to.
+pub trait ExtendModule<'lua> {
+    /// Extend the current content with the contents of a [`Module`]
+    fn extend<M: Module>(&mut self, lua: &'lua Lua) -> mlua::Result<()>;
+}
+
+impl<'lua> ExtendModule<'lua> for Table<'lua> {
+    fn extend<M: Module>(&mut self, lua: &'lua Lua) -> mlua::Result<()> {
+        let mut builder: ModuleBuilder<'lua> = ModuleBuilder {
+            table: self.clone(),
+            lua,
+            parents: Vec::new(),
+        };
+
+        M::add_fields(&mut builder)?;
+        M::add_methods(&mut builder)?;
+
+        Ok(())
     }
 }
 
@@ -70,7 +94,7 @@ pub trait ModuleMethods<'lua> {
     fn add_function<K, F, A, R>(&mut self, name: K, function: F) -> mlua::Result<()>
     where
         K: IntoLua<'lua>,
-        F: Fn(&mlua::Lua, A) -> mlua::Result<R> + MaybeSend + 'static,
+        F: Fn(&'lua mlua::Lua, A) -> mlua::Result<R> + MaybeSend + 'static,
         A: FromLuaMulti<'lua>,
         R: IntoLuaMulti<'lua>;
 
@@ -78,7 +102,7 @@ pub trait ModuleMethods<'lua> {
     fn add_meta_function<K, F, A, R>(&mut self, name: K, function: F) -> mlua::Result<()>
     where
         K: IntoLua<'lua>,
-        F: Fn(&mlua::Lua, A) -> mlua::Result<R> + MaybeSend + 'static,
+        F: Fn(&'lua mlua::Lua, A) -> mlua::Result<R> + MaybeSend + 'static,
         A: FromLuaMulti<'lua>,
         R: IntoLuaMulti<'lua>;
 
@@ -86,7 +110,7 @@ pub trait ModuleMethods<'lua> {
     fn add_method<K, F, A, R>(&mut self, name: K, function: F) -> mlua::Result<()>
     where
         K: IntoLua<'lua>,
-        F: Fn(&mlua::Lua, mlua::Table<'_>, A) -> mlua::Result<R> + MaybeSend + 'static,
+        F: Fn(&'lua mlua::Lua, mlua::Table<'_>, A) -> mlua::Result<R> + MaybeSend + 'static,
         A: FromLuaMulti<'lua>,
         R: IntoLuaMulti<'lua>;
 
@@ -94,7 +118,7 @@ pub trait ModuleMethods<'lua> {
     fn add_meta_method<K, F, A, R>(&mut self, name: K, function: F) -> mlua::Result<()>
     where
         K: IntoLua<'lua>,
-        F: Fn(&mlua::Lua, mlua::Table<'_>, A) -> mlua::Result<R> + MaybeSend + 'static,
+        F: Fn(&'lua mlua::Lua, mlua::Table<'_>, A) -> mlua::Result<R> + MaybeSend + 'static,
         A: FromLuaMulti<'lua>,
         R: IntoLuaMulti<'lua>;
 }
@@ -166,7 +190,7 @@ impl<'lua> ModuleMethods<'lua> for ModuleBuilder<'lua> {
     fn add_function<K, F, A, R>(&mut self, name: K, function: F) -> mlua::Result<()>
     where
         K: IntoLua<'lua>,
-        F: Fn(&mlua::Lua, A) -> mlua::Result<R> + MaybeSend + 'static,
+        F: Fn(&'lua mlua::Lua, A) -> mlua::Result<R> + MaybeSend + 'static,
         A: FromLuaMulti<'lua>,
         R: IntoLuaMulti<'lua>,
     {
@@ -176,7 +200,7 @@ impl<'lua> ModuleMethods<'lua> for ModuleBuilder<'lua> {
     fn add_meta_function<K, F, A, R>(&mut self, name: K, function: F) -> mlua::Result<()>
     where
         K: IntoLua<'lua>,
-        F: Fn(&mlua::Lua, A) -> mlua::Result<R> + MaybeSend + 'static,
+        F: Fn(&'lua mlua::Lua, A) -> mlua::Result<R> + MaybeSend + 'static,
         A: FromLuaMulti<'lua>,
         R: IntoLuaMulti<'lua>,
     {
@@ -195,7 +219,7 @@ impl<'lua> ModuleMethods<'lua> for ModuleBuilder<'lua> {
     fn add_method<K, F, A, R>(&mut self, name: K, function: F) -> mlua::Result<()>
     where
         K: IntoLua<'lua>,
-        F: Fn(&mlua::Lua, mlua::Table<'_>, A) -> mlua::Result<R> + MaybeSend + 'static,
+        F: Fn(&'lua mlua::Lua, mlua::Table<'_>, A) -> mlua::Result<R> + MaybeSend + 'static,
         A: FromLuaMulti<'lua>,
         R: IntoLuaMulti<'lua>,
     {
@@ -213,7 +237,7 @@ impl<'lua> ModuleMethods<'lua> for ModuleBuilder<'lua> {
     fn add_meta_method<K, F, A, R>(&mut self, name: K, function: F) -> mlua::Result<()>
     where
         K: IntoLua<'lua>,
-        F: Fn(&mlua::Lua, mlua::Table<'_>, A) -> mlua::Result<R> + MaybeSend + 'static,
+        F: Fn(&'lua mlua::Lua, mlua::Table<'_>, A) -> mlua::Result<R> + MaybeSend + 'static,
         A: FromLuaMulti<'lua>,
         R: IntoLuaMulti<'lua>,
     {

@@ -200,7 +200,7 @@ dependencies = [
 
 [[package]]
 name = "mlua-extras"
-version = "0.0.5"
+version = "0.0.6"
 dependencies = [
  "mlua",
  "mlua-extras-derive",
@@ -210,7 +210,7 @@ dependencies = [
 
 [[package]]
 name = "mlua-extras-derive"
-version = "0.0.2"
+version = "0.0.3"
 dependencies = [
  "proc-macro-error",
  "proc-macro2",

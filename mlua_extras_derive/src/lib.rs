@@ -25,12 +25,12 @@ pub fn derive_user_data(input: TokenStream) -> TokenStream {
     quote!(
         impl mlua_extras::mlua::UserData for #name {
             fn add_fields<'lua, F: mlua_extras::mlua::UserDataFields<'lua, Self>>(fields: &mut F) {
-                let mut wrapper = mlua_extras::typed::WrappedGenerator::new(fields);
+                let mut wrapper = mlua_extras::typed::WrappedBuilder::new(fields);
                 <#name as mlua_extras::typed::TypedUserData>::add_fields(&mut wrapper);
             }
 
             fn add_methods<'lua, M: mlua_extras::mlua::UserDataMethods<'lua, Self>>(methods: &mut M) {
-                let mut wrapper = mlua_extras::typed::WrappedGenerator::new(methods);
+                let mut wrapper = mlua_extras::typed::WrappedBuilder::new(methods);
                 <#name as mlua_extras::typed::TypedUserData>::add_methods(&mut wrapper);
             }
         }
@@ -79,9 +79,9 @@ pub fn derive_typed(input: TokenStream) -> TokenStream {
                             let tuple_values = named.fields.iter().map(|(field, _)| {
                                 let name = field.name.to_string();
                                 let ty = field.ty.clone();
-                                quote!{ (#name, <#ty as mlua_extras::typed::Typed>::ty()) }
+                                quote!{ (mlua_extras::typed::Index::from(#name), <#ty as mlua_extras::typed::Typed>::ty()) }
                             }).collect::<Vec<_>>();
-                            quote!{ mlua_extras::typed::Type::Struct(std::collections::HashMap::from([
+                            quote!{ mlua_extras::typed::Type::Table(std::collections::BTreeMap::from([
                                     #(#tuple_values,)*
                             ])) }
                         }
