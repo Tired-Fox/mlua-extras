@@ -9,15 +9,47 @@ use super::{Type, Typed, TypedMultiValue};
 /// A function parameter type representation
 #[derive(Debug, Clone, PartialEq, PartialOrd, Eq, Ord)]
 pub struct Param {
+    pub doc: Option<Cow<'static, str>>,
     ///If the parameter has a name (will default to Param{number} if None)
     pub name: Option<Cow<'static, str>>,
     ///The type of the parameter
-    pub ty: Type,
+    pub(crate) ty: Type,
+}
+
+impl Param {
+    /// Set the parameters name
+    pub fn set_name(&mut self, name: impl Into<Cow<'static, str>>) -> &mut Self {
+        self.name = Some(name.into());
+        self
+    }
+
+    /// Set the parameters doc comment
+    pub fn set_doc(&mut self, doc: impl Into<Cow<'static, str>>) -> &mut Self {
+        self.doc = Some(doc.into());
+        self
+    }
+}
+
+/// A function parameter type representation
+#[derive(Debug, Clone, PartialEq, PartialOrd, Eq, Ord)]
+pub struct Return {
+    pub doc: Option<Cow<'static, str>>,
+    ///The type of the return
+    pub(crate) ty: Type,
+}
+
+impl Return {
+    /// Set the parameters doc comment
+    pub fn set_doc(&mut self, doc: impl Into<Cow<'static, str>>) -> &mut Self {
+        self.doc = Some(doc.into());
+        self
+    }
 }
 
 impl<I: Into<Cow<'static, str>>> From<(I, Type)> for Param {
     fn from((name, ty): (I, Type)) -> Self {
         Param {
+            doc: None,
             name: Some(name.into()),
             ty,
         }
@@ -27,6 +59,7 @@ impl<I: Into<Cow<'static, str>>> From<(I, Type)> for Param {
 impl From<Type> for Param {
     fn from(value: Type) -> Self {
         Param {
+            doc: None,
             name: None,
             ty: value,
         }
@@ -195,7 +228,7 @@ where
     fn ty() -> Type {
         Type::Function {
             params: Params::get_types_as_params(),
-            returns: Response::get_types(),
+            returns: Response::get_types().into_iter().map(|ty| Return { doc: None, ty }).collect(),
         }
     }
 }

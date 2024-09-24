@@ -49,6 +49,10 @@ Just make sure you use the exposed `mlua` crate through this crates API (`mlua-e
     - `Require`
         - call `require` which allows for a lua style call to get data from the lua engine.
         - ex: `table.require::<String>("nested.tables.name")?` == `local name = require('nested.tables').name` 
+    - `Module`
+        - Syntax and API mimics `UserData` adding fields, functions and methods. Instead of createing a lua `userdata` type, it adds these values to a lua `table`.
+        - This allows for all the data to be held in lua
+        - This allows for a complex lua api without creating a bunch of userdata objects
     - `LuaExtras`
         - Manipulate the lua [`path`](https://www.lua.org/manual/5.1/manual.html#pdf-package.path) and [`cpath`](https://www.lua.org/manual/5.1/manual.html#pdf-package.cpath) variables with `append`, `prepend`, and `set` methods for each variant. It also includes the ability to add multiple paths with each variant.
         - Set global variables and functions with `set_global("value", "value")` and `set_global_function("func", |lua, ()| Ok(()))` which wold replace `lua.globals().set("value", "value)` and `lua.globals().set("func", lua.create_function(|lua, ()| Ok(()))?)` respectively

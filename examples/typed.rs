@@ -31,6 +31,7 @@ enum Color {
     Xterm(u8),
     Rgb(u8, u8, u8),
 }
+
 impl Default for Color {
     fn default() -> Self {
         Color::System(SystemColor::default())
@@ -155,14 +156,14 @@ fn main() -> mlua::Result<()> {
 
     // ===== Generate Types and Definition Files =====
 
-    let definitions = Definitions::generate()
-        .define("init", Definition::generate()
+    let definitions = Definitions::start()
+        .define("init", Definition::start()
             .register_enum::<SystemColor>()?
             .register_enum::<Color>()?
-            .register::<Example>()
-            .value_with::<Example, _>("example", ["Example module"])
-            .function_with::<String, (), _>("greet", (), ["Greet the name that was passed in"])
-            .function_with::<Color, (), _>("printColor", (), ["Print a color and it's value"])
+            .register_class::<Example>()
+            .value::<Example, _>("example")
+            .function::<String, (), _>("greet", ())
+            .function::<Color, (), _>("printColor", ())
         )
         .finish();
 

@@ -1,6 +1,6 @@
-use std::{path::Path, slice::Iter};
+use std::{borrow::Cow, path::Path, slice::Iter};
 
-use crate::typed::{Param, Type};
+use crate::typed::{function::Return, Param, Type, TypedModuleBuilder};
 
 use super::{Definition, Definitions};
 
@@ -67,7 +67,7 @@ impl<'def> DefinitionFileGenerator<'def> {
 
 pub struct DefinitionFileIter<'def> {
     extension: String,
-    definitions: Iter<'def, Definition<'def>>,
+    definitions: Iter<'def, (Cow<'def, str>, Definition<'def>)>,
 }
 
 impl<'def> Iterator for DefinitionFileIter<'def> {
@@ -76,8 +76,8 @@ impl<'def> Iterator for DefinitionFileIter<'def> {
     fn next(&mut self) -> Option<Self::Item> {
         self.definitions.next().map(|v| {
             (
-                format!("{}{}", v.name, self.extension),
-                DefinitionWriter { definition: v },
+                format!("{}{}", v.0, self.extension),
+                DefinitionWriter { definition: &v.1 },
             )
         })
     }
@@ -107,7 +107,7 @@ impl DefinitionWriter<'_> {
         for definition in self.definition.iter() {
             match &definition.ty {
                 Type::Value(ty) => {
-                    if let Some(docs) = Self::accumulate_docs(&[&definition.docs]) {
+                    if let Some(docs) = Self::accumulate_docs(&[definition.doc.as_deref()]) {
                         writeln!(buffer, "{}", docs.join("\n"))?;
                     }
 
@@ -116,14 +116,14 @@ impl DefinitionWriter<'_> {
                 }
                 Type::Class(type_data) => {
                     if let Some(docs) =
-                        Self::accumulate_docs(&[&definition.docs, &type_data.type_doc])
+                        Self::accumulate_docs(&[definition.doc.as_deref(), type_data.type_doc.as_deref()])
                     {
                         writeln!(buffer, "{}", docs.join("\n"))?;
                     }
                     writeln!(buffer, "--- @class {}", definition.name)?;
 
                     for (name, field) in type_data.static_fields.iter() {
-                        if let Some(docs) = Self::accumulate_docs(&[&field.docs]) {
+                        if let Some(docs) = Self::accumulate_docs(&[field.doc.as_deref()]) {
                             writeln!(buffer, "{}", docs.join("\n"))?;
                         }
                         writeln!(
@@ -134,7 +134,7 @@ impl DefinitionWriter<'_> {
                     }
 
                     for (name, field) in type_data.fields.iter() {
-                        if let Some(docs) = Self::accumulate_docs(&[&field.docs]) {
+                        if let Some(docs) = Self::accumulate_docs(&[field.doc.as_deref()]) {
                             writeln!(buffer, "{}", docs.join("\n"))?;
                         }
                         writeln!(
@@ -153,7 +153,7 @@ impl DefinitionWriter<'_> {
                     {
                         writeln!(buffer, "local _Class_{} = {{", definition.name)?;
                         for (name, func) in type_data.functions.iter() {
-                            if let Some(docs) = Self::accumulate_docs(&[&func.docs]) {
+                            if let Some(docs) = Self::accumulate_docs(&[func.doc.as_deref()]) {
                                 writeln!(buffer, "  {}", docs.join("\n  "))?;
                             }
                             writeln!(
@@ -170,7 +170,7 @@ impl DefinitionWriter<'_> {
                         }
 
                         for (name, func) in type_data.methods.iter() {
-                            if let Some(docs) = Self::accumulate_docs(&[&func.docs]) {
+                            if let Some(docs) = Self::accumulate_docs(&[func.doc.as_deref()]) {
                                 writeln!(buffer, "  {}", docs.join("\n  "))?;
                             }
                             writeln!(
@@ -193,7 +193,7 @@ impl DefinitionWriter<'_> {
                         {
                             writeln!(buffer, "  __metatable = {{")?;
                             for (name, field) in type_data.meta_fields.iter() {
-                                if let Some(docs) = Self::accumulate_docs(&[&field.docs]) {
+                                if let Some(docs) = Self::accumulate_docs(&[field.doc.as_deref()]) {
                                     writeln!(buffer, "    {}", docs.join("\n    "))?;
                                 }
                                 writeln!(buffer, "--- @type {}", Self::type_signature(&field.ty)?)?;
@@ -201,7 +201,7 @@ impl DefinitionWriter<'_> {
                             }
 
                             for (name, func) in type_data.meta_functions.iter() {
-                                if let Some(docs) = Self::accumulate_docs(&[&func.docs]) {
+                                if let Some(docs) = Self::accumulate_docs(&[func.doc.as_deref()]) {
                                     writeln!(buffer, "    {}", docs.join("\n    "))?;
                                 }
                                 writeln!(
@@ -218,7 +218,7 @@ impl DefinitionWriter<'_> {
                             }
 
                             for (name, func) in type_data.meta_methods.iter() {
-                                if let Some(docs) = Self::accumulate_docs(&[&func.docs]) {
+                                if let Some(docs) = Self::accumulate_docs(&[func.doc.as_deref()]) {
                                     writeln!(buffer, "    {}", docs.join("\n    "))?;
                                 }
                                 writeln!(
@@ -241,7 +241,7 @@ impl DefinitionWriter<'_> {
                     }
                 }
                 Type::Enum(name, types) => {
-                    if let Some(docs) = Self::accumulate_docs(&[&definition.docs]) {
+                    if let Some(docs) = Self::accumulate_docs(&[definition.doc.as_deref()]) {
                         writeln!(buffer, "{}", docs.join("\n"))?;
                     }
                     writeln!(
@@ -255,7 +255,7 @@ impl DefinitionWriter<'_> {
                     )?;
                 }
                 Type::Alias(ty) => {
-                    if let Some(docs) = Self::accumulate_docs(&[&definition.docs]) {
+                    if let Some(docs) = Self::accumulate_docs(&[definition.doc.as_deref()]) {
                         writeln!(buffer, "{}", docs.join("\n"))?;
                     }
                     writeln!(
@@ -266,7 +266,7 @@ impl DefinitionWriter<'_> {
                     )?;
                 }
                 Type::Function { params, returns } => {
-                    if let Some(docs) = Self::accumulate_docs(&[&definition.docs]) {
+                    if let Some(docs) = Self::accumulate_docs(&[definition.doc.as_deref()]) {
                         writeln!(buffer, "{}", docs.join("\n"))?;
                     }
                     writeln!(
@@ -281,6 +281,18 @@ impl DefinitionWriter<'_> {
                         .join("\n")
                     )?;
                 }
+                Type::Module(module) => {
+                    if let Some(docs) =
+                        Self::accumulate_docs(&[definition.doc.as_deref(), module.doc.as_deref()])
+                    {
+                        writeln!(buffer, "{}", docs.join("\n"))?;
+                    }
+
+                    write!(buffer, "{} = ", definition.name)?;
+                    let mut path = Vec::new();
+                    Self::write_module(&mut buffer, module, &mut path)?;
+                    writeln!(buffer)?;
+                },
                 other => {
                     return Err(mlua::Error::runtime(format!(
                         "invalid root level type: {}",
@@ -297,32 +309,23 @@ impl DefinitionWriter<'_> {
     fn function_signature(
         name: String,
         params: &[Param],
-        returns: &[Type],
+        returns: &[Return],
         assign: bool,
     ) -> mlua::Result<Vec<String>> {
         let mut result = Vec::new();
 
-        result.extend(
-            params
-                .iter()
-                .enumerate()
-                .map(|(i, v)| {
-                    Ok(format!(
-                        "--- @param {} {}",
-                        v.name
-                            .as_ref()
-                            .map(|v| v.to_string())
-                            .unwrap_or(format!("param{i}")),
-                        Self::type_signature(&v.ty)?
-                    ))
-                })
-                .chain(
-                    returns
-                        .iter()
-                        .map(|v| Ok(format!("--- @return {}", Self::type_signature(v)?))),
-                )
-                .collect::<mlua::Result<Vec<_>>>()?,
-        );
+        for (i, param) in params.iter().enumerate() {
+            let doc = param.doc.as_deref().unwrap_or_default();
+            result.push(match param.name.as_deref() {
+                Some(name) => format!("--- @param {name} {} {doc}", Self::type_signature(&param.ty)?),
+                None => format!("--- @param param{i} {} {doc}", Self::type_signature(&param.ty)?),
+            });
+        }
+
+        for ret in returns.iter() {
+            let doc = ret.doc.as_deref().unwrap_or_default();
+            result.push(format!("--- @return {} {doc}", Self::type_signature(&ret.ty)?));
+        }
 
         result.push(format!(
             "{}function{}({}) end",
@@ -354,31 +357,22 @@ impl DefinitionWriter<'_> {
         name: String,
         class: String,
         params: &[Param],
-        returns: &[Type],
+        returns: &[Return],
         assign: bool,
     ) -> mlua::Result<Vec<String>> {
         let mut result = Vec::from([format!("--- @param self {class}")]);
-        result.extend(
-            params
-                .iter()
-                .enumerate()
-                .map(|(i, v)| {
-                    Ok(format!(
-                        "--- @param {} {}",
-                        v.name
-                            .as_ref()
-                            .map(|v| v.to_string())
-                            .unwrap_or(format!("param{i}")),
-                        Self::type_signature(&v.ty)?
-                    ))
-                })
-                .chain(
-                    returns
-                        .iter()
-                        .map(|v| Ok(format!("--- @return {}", Self::type_signature(v)?))),
-                )
-                .collect::<mlua::Result<Vec<_>>>()?,
-        );
+        for (i, param) in params.iter().enumerate() {
+            let doc = param.doc.as_deref().unwrap_or_default();
+            result.push(match param.name.as_deref() {
+                Some(name) => format!("--- @param {name} {} {doc}", Self::type_signature(&param.ty)?),
+                None => format!("--- @param param{i} {} {doc}", Self::type_signature(&param.ty)?),
+            });
+        }
+
+        for ret in returns.iter() {
+            let doc = ret.doc.as_deref().unwrap_or_default();
+            result.push(format!("--- @return {} {doc}", Self::type_signature(&ret.ty)?));
+        }
 
         result.push(format!(
             "{}function{}({}{}) end",
@@ -456,7 +450,7 @@ impl DefinitionWriter<'_> {
                             ": {}",
                             returns
                                 .iter()
-                                .map(Self::type_signature)
+                                .map(|v| Self::type_signature(&v.ty))
                                 .collect::<mlua::Result<Vec<_>>>()?
                                 .join(", ")
                         )
@@ -487,12 +481,121 @@ impl DefinitionWriter<'_> {
         })
     }
 
-    fn accumulate_docs(docs: &[&[String]]) -> Option<Vec<String>> {
-        let docs = docs.iter().flat_map(|v| *v).collect::<Vec<_>>();
+    fn accumulate_docs(docs: &[Option<&str>]) -> Option<Vec<String>> {
+        let docs = docs.iter().filter_map(|v| *v).collect::<Vec<_>>();
         (!docs.is_empty()).then_some({
             docs.iter()
                 .flat_map(|v| v.split('\n').map(|v| format!("--- {v}")))
                 .collect::<Vec<_>>()
         })
+    }
+
+    fn write_module<B: std::io::Write>(buffer: &mut B, module: &TypedModuleBuilder, path: &mut Vec<String>) -> mlua::Result<()> {
+        let indent = path.len()*2;
+        let current_offset = (0..indent).map(|_| ' ').collect::<String>();
+        let single_offset = (0..indent+2).map(|_| ' ').collect::<String>();
+
+        if module.is_empty() {
+            write!(buffer, "{{}}")?;
+            return Ok(())
+        } else {
+            writeln!(buffer, "{{")?;
+        }
+
+        for (name, field) in module.fields.iter() {
+            if let Some(docs) = Self::accumulate_docs(&[field.doc.as_deref()]) {
+                writeln!(buffer, "{single_offset}{}", docs.join(format!("\n{single_offset}").as_str()))?;
+            }
+
+            match &field.ty {
+                &Type::Module(ref module) => {
+                    write!(buffer, "{single_offset}{name} = ")?;
+                    path.push(name.to_string());
+                    Self::write_module(buffer, module, path)?;
+                    path.pop();
+                    writeln!(buffer, ",")?;
+                },
+                other => {
+                    writeln!(buffer, "{single_offset}--- @type {}", Self::type_signature(other)?)?;
+                    writeln!(buffer, "{single_offset}{name} = nil,", )?
+                },
+            }
+        }
+
+        for (name, nested) in module.nested_modules.iter() {
+            if let Some(docs) = Self::accumulate_docs(&[nested.doc.as_deref()]) {
+                writeln!(buffer, "{single_offset}{}", docs.join(format!("\n{single_offset}").as_str()))?;
+            }
+
+            write!(buffer, "{single_offset}{name} = ")?;
+            path.push(name.to_string());
+            Self::write_module(buffer, nested, path)?;
+            path.pop();
+            writeln!(buffer, ",")?;
+        }
+
+        for (name, func) in module.functions.iter() {
+            if let Some(docs) = Self::accumulate_docs(&[func.doc.as_deref()]) {
+                writeln!(buffer, "{single_offset}{}", docs.join(format!("\n{single_offset}").as_str()))?;
+            }
+
+            writeln!(buffer, "{single_offset}{},", Self::function_signature(name.to_string(), &func.params, &func.returns, true)?.join(format!("\n{single_offset}").as_str()))?;
+        }
+
+        for (name, func) in module.methods.iter() {
+            if let Some(docs) = Self::accumulate_docs(&[func.doc.as_deref()]) {
+                writeln!(buffer, "{single_offset}{}", docs.join(format!("\n{single_offset}").as_str()))?;
+            }
+
+            writeln!(buffer, "{single_offset}{},", Self::method_signature(name.to_string(), "table".into(), &func.params, &func.returns, true)?.join(format!("\n{single_offset}").as_str()))?;
+        }
+
+        if !module.is_meta_empty() {
+            writeln!(buffer, "{single_offset}__metatable = {{")?;
+
+            let double_offset = (0..indent+4).map(|_| ' ').collect::<String>();
+
+            for (name, field) in module.meta_fields.iter() {
+                if let Some(docs) = Self::accumulate_docs(&[field.doc.as_deref()]) {
+                    writeln!(buffer, "{double_offset}{}", docs.join(format!("\n{single_offset}").as_str()))?;
+                }
+
+                match &field.ty {
+                    &Type::Module(ref module) => {
+                        write!(buffer, "{double_offset}{name} = ")?;
+                        path.push(name.to_string());
+                        Self::write_module(buffer, module, path)?;
+                        path.pop();
+                        writeln!(buffer, ",")?;
+                    },
+                    other => {
+                        writeln!(buffer, "{double_offset}--- @type {}", Self::type_signature(other)?)?;
+                        writeln!(buffer, "{double_offset}{name} = nil,", )?
+                    },
+                }
+            }
+
+            for (name, func) in module.meta_functions.iter() {
+                if let Some(docs) = Self::accumulate_docs(&[func.doc.as_deref()]) {
+                    writeln!(buffer, "{double_offset}{}", docs.join(format!("\n{double_offset}").as_str()))?;
+                }
+
+                writeln!(buffer, "{double_offset}{},", Self::function_signature(name.to_string(), &func.params, &func.returns, true)?.join(format!("\n{double_offset}").as_str()))?;
+            }
+
+            for (name, func) in module.meta_methods.iter() {
+                if let Some(docs) = Self::accumulate_docs(&[func.doc.as_deref()]) {
+                    writeln!(buffer, "{double_offset}{}", docs.join(format!("\n{double_offset}").as_str()))?;
+                }
+
+                writeln!(buffer, "{double_offset}{},", Self::method_signature(name.to_string(), "table".into(), &func.params, &func.returns, true)?.join(format!("\n{double_offset}").as_str()))?;
+            }
+
+            writeln!(buffer, "{single_offset}}},")?;
+        }
+
+        write!(buffer, "{current_offset}}}")?;
+
+        Ok(())
     }
 }
