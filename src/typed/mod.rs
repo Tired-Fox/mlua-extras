@@ -341,6 +341,26 @@ impl Type {
         Self::Single(value.into())
     }
 
+    pub fn string() -> Self {
+        Self::Single("string".into())
+    }
+
+    pub fn integer() -> Self {
+        Self::Single("integer".into())
+    }
+
+    pub fn number() -> Self {
+        Self::Single("number".into())
+    }
+
+    pub fn boolean() -> Self {
+        Self::Single("boolean".into())
+    }
+
+    pub fn nil() -> Self {
+        Self::Single("nil".into())
+    }
+
     /// Create an enum type. This is equal to an [`alias`][crate::typed::Type::Alias]
     pub fn r#enum(
         name: impl Into<Cow<'static, str>>,

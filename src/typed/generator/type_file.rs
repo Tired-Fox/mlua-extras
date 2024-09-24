@@ -417,11 +417,10 @@ impl DefinitionWriter<'_> {
             Type::Single(value) => value.to_string(),
             Type::Tuple(types) => {
                 format!(
-                    "{{ {} }}",
+                    "[{}]",
                     types
                         .iter()
-                        .enumerate()
-                        .map(|(i, t)| Ok(format!("[{}]: {}", i + 1, Self::type_signature(t)?)))
+                        .map(Self::type_signature)
                         .collect::<mlua::Result<Vec<_>>>()?
                         .join(", ")
                 )
@@ -430,7 +429,7 @@ impl DefinitionWriter<'_> {
                 format!("...{}", Self::type_signature(ty)?)
             }
             Type::Array(ty) => {
-                format!("{{ [integer]: {} }}", Self::type_signature(ty)?)
+                format!("{}[]", Self::type_signature(ty)?)
             }
             Type::Map(key, value) => {
                 format!(

@@ -13,20 +13,23 @@ pub struct Param {
     ///If the parameter has a name (will default to Param{number} if None)
     pub name: Option<Cow<'static, str>>,
     ///The type of the parameter
-    pub(crate) ty: Type,
+    pub ty: Type,
 }
 
 impl Param {
     /// Set the parameters name
-    pub fn set_name(&mut self, name: impl Into<Cow<'static, str>>) -> &mut Self {
+    pub fn set_name(&mut self, name: impl Into<Cow<'static, str>>) {
         self.name = Some(name.into());
-        self
     }
 
     /// Set the parameters doc comment
-    pub fn set_doc(&mut self, doc: impl Into<Cow<'static, str>>) -> &mut Self {
+    pub fn set_doc(&mut self, doc: impl Into<Cow<'static, str>>) {
         self.doc = Some(doc.into());
-        self
+    }
+
+    /// Set the parameters type manually
+    pub fn set_type(&mut self, ty: Type) {
+        self.ty = ty;
     }
 }
 
@@ -40,9 +43,8 @@ pub struct Return {
 
 impl Return {
     /// Set the parameters doc comment
-    pub fn set_doc(&mut self, doc: impl Into<Cow<'static, str>>) -> &mut Self {
+    pub fn set_doc(&mut self, doc: impl Into<Cow<'static, str>>) {
         self.doc = Some(doc.into());
-        self
     }
 }
 

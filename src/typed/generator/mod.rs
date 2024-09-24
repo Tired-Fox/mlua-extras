@@ -77,31 +77,28 @@ where
     Returns: TypedMultiValue,
 {
     /// Set the doc comment for the function type
-    pub fn document(&mut self, doc: impl Into<Cow<'static, str>>) -> &mut Self {
+    pub fn document(&mut self, doc: impl Into<Cow<'static, str>>) {
         self.doc = Some(doc.into());
-        self
     }
 
     /// Update a parameter's information given it's position in the argument list
-    pub fn param<F>(&mut self, index: usize, generator: F) -> &mut Self
+    pub fn param<F>(&mut self, index: usize, generator: F)
     where
         F: Fn(&mut Param)
     {
         if let Some(param) = self.params.get_mut(index) {
             generator(param);
         }
-        self
     }
 
     /// Update a return type's information given it's position in the return list
-    pub fn ret<F>(&mut self, index: usize, generator: F) -> &mut Self
+    pub fn ret<F>(&mut self, index: usize, generator: F)
     where
         F: Fn(&mut Return)
     {
         if let Some(ret) = self.returns.get_mut(index) {
             generator(ret);
         }
-        self
     }
 }
 
