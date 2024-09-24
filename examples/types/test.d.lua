@@ -15,4 +15,4 @@ test = {
 	},
 }
 
-test.greet("Zachary")
+test.greet("mlua")
