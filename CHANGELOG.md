@@ -9,6 +9,8 @@
 - Add `lua` lifetime to `add_*_function` and `add_*_method` methods to allow for lua type construction and return. i.e. tables, strings, etc.
 - Definition file generation handles table key escaping. i.e. `[0]` and `["key.name"]`
 - Rename `Type::Struct` to `Type::Table`
+- Add better `BitOr` support for anything that can be converted to a `Type`
+    - This allows for cool type building ex: `Type::nil() | "literal" | 3 | true | [Type::string(), Type::integer()]`
 
 **Fixes**
 

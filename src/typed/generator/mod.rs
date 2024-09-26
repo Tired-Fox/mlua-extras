@@ -1,8 +1,15 @@
 use std::{
-    borrow::Cow, marker::PhantomData, slice::{Iter, IterMut}, vec::IntoIter
+    borrow::Cow,
+    marker::PhantomData,
+    slice::{Iter, IterMut},
+    vec::IntoIter,
 };
 
-use super::{function::{IntoTypedFunction, Return}, Param, Type, Typed, TypedClassBuilder, TypedModule, TypedModuleBuilder, TypedMultiValue, TypedUserData};
+use super::{
+    function::{IntoTypedFunction, Return},
+    Param, Type, Typed, TypedClassBuilder, TypedModule, TypedModuleBuilder, TypedMultiValue,
+    TypedUserData,
+};
 
 mod type_file;
 pub use type_file::DefinitionFileGenerator;
@@ -52,9 +59,8 @@ where
     pub doc: Option<Cow<'static, str>>,
     pub params: Vec<Param>,
     pub returns: Vec<Return>,
-    _m: PhantomData<fn(Params) -> Returns>
+    _m: PhantomData<fn(Params) -> Returns>,
 }
-
 
 impl<Params, Returns> Default for FunctionBuilder<Params, Returns>
 where
@@ -65,9 +71,12 @@ where
         Self {
             doc: None,
             params: Params::get_types_as_params(),
-            returns: Returns::get_types().into_iter().map(|ty| Return { doc: None, ty }).collect(),
-            _m: PhantomData, 
-        }        
+            returns: Returns::get_types()
+                .into_iter()
+                .map(|ty| Return { doc: None, ty })
+                .collect(),
+            _m: PhantomData,
+        }
     }
 }
 
@@ -84,7 +93,7 @@ where
     /// Update a parameter's information given it's position in the argument list
     pub fn param<F>(&mut self, index: usize, generator: F)
     where
-        F: Fn(&mut Param)
+        F: Fn(&mut Param) -> &mut Param,
     {
         if let Some(param) = self.params.get_mut(index) {
             generator(param);
@@ -94,7 +103,7 @@ where
     /// Update a return type's information given it's position in the return list
     pub fn ret<F>(&mut self, index: usize, generator: F)
     where
-        F: Fn(&mut Return)
+        F: Fn(&mut Return) -> &mut Return,
     {
         if let Some(ret) = self.returns.get_mut(index) {
             generator(ret);
@@ -130,12 +139,12 @@ impl<'def> DefinitionBuilder<'def> {
         mut self,
         name: impl Into<Cow<'def, str>>,
         _: impl IntoTypedFunction<'lua, Params, Returns>,
-        generator: F
+        generator: F,
     ) -> Self
     where
         Params: TypedMultiValue,
         Returns: TypedMultiValue,
-        F: Fn(&mut FunctionBuilder<Params, Returns>)
+        F: Fn(&mut FunctionBuilder<Params, Returns>),
     {
         let mut func = FunctionBuilder::<Params, Returns>::default();
         generator(&mut func);
@@ -143,7 +152,7 @@ impl<'def> DefinitionBuilder<'def> {
             name,
             Type::Function {
                 params: func.params,
-                returns: func.returns
+                returns: func.returns,
             },
             func.doc,
         ));
@@ -173,7 +182,18 @@ impl<'def> DefinitionBuilder<'def> {
     /// Register a definition entry that is a class type
     ///
     /// The name of the class is the same as the name of the type passed
-    pub fn register_class<T: TypedUserData>(mut self) -> Self {
+    pub fn register(mut self, name: impl Into<Cow<'def, str>>, ty: impl Into<Type>) -> Self {
+        self.entries.push(Entry::new(
+            name,
+            ty.into(),
+        ));
+        self
+    }
+
+    /// Register a definition entry that is a class type
+    ///
+    /// The name of the class is the same as the name of the type passed
+    pub fn class<T: TypedUserData>(mut self) -> Self {
         let name = std::any::type_name::<T>();
         self.entries.push(Entry::new(
             name.rsplit_once("::").map(|v| v.1).unwrap_or(name),
@@ -182,8 +202,8 @@ impl<'def> DefinitionBuilder<'def> {
         self
     }
 
-    /// Same as [`register_class`][DefinitionBuilder::register_class] but with additional docs
-    pub fn register_class_with<T: TypedUserData, S: Into<Cow<'def, str>>>(
+    /// Same as [`class`][DefinitionBuilder::class] but with additional docs
+    pub fn class_with<T: TypedUserData, S: Into<Cow<'def, str>>>(
         mut self,
         doc: Option<S>,
     ) -> Self {
@@ -198,7 +218,7 @@ impl<'def> DefinitionBuilder<'def> {
     /// Register a definition entry that is a class type
     ///
     /// The name of the class is the same as the name of the type passed
-    pub fn register_module<T: TypedModule>(mut self, name: impl Into<Cow<'def, str>>) -> Self {
+    pub fn module<T: TypedModule>(mut self, name: impl Into<Cow<'def, str>>) -> Self {
         self.entries.push(Entry::new(
             name,
             // PERF: Ensure that the builder doesn't need it's error bubbled up another layer
@@ -207,8 +227,8 @@ impl<'def> DefinitionBuilder<'def> {
         self
     }
 
-    /// Same as [`register_module`][DefinitionBuilder::register_module] but with additional docs
-    pub fn register_module_with<T: TypedModule, S: Into<Cow<'def, str>>>(
+    /// Same as [`module`][DefinitionBuilder::module] but with additional docs
+    pub fn module_with<T: TypedModule, S: Into<Cow<'def, str>>>(
         mut self,
         name: impl Into<Cow<'def, str>>,
         doc: Option<S>,
@@ -248,7 +268,7 @@ impl<'def> DefinitionBuilder<'def> {
     ///
     /// assert!(matches!(Color::ty(), Type::Enum(_, _)))
     /// ```
-    pub fn register_enum<T: Typed>(mut self) -> mlua::Result<Self> {
+    pub fn r#enum<T: Typed>(mut self) -> mlua::Result<Self> {
         match T::ty() {
             Type::Enum(name, types) => {
                 self.entries
@@ -264,8 +284,8 @@ impl<'def> DefinitionBuilder<'def> {
         Ok(self)
     }
 
-    /// Same as [`register`][DefinitionBuilder::register_enum] but with additional docs
-    pub fn register_enum_with<T: Typed, S: Into<Cow<'def, str>>>(
+    /// Same as [`enum`][DefinitionBuilder::r#enum] but with additional docs
+    pub fn enum_with<T: Typed, S: Into<Cow<'def, str>>>(
         mut self,
         doc: Option<S>,
     ) -> mlua::Result<Self> {
@@ -396,10 +416,7 @@ impl<'def> DefinitionsBuilder<'def> {
         name: impl Into<Cow<'def, str>>,
         definition: impl Into<Definition<'def>>,
     ) -> Self {
-        self.definitions.push((
-            name.into(),
-            definition.into(),
-        ));
+        self.definitions.push((name.into(), definition.into()));
         self
     }
 

@@ -48,7 +48,7 @@ pub fn derive_typed(input: TokenStream) -> TokenStream {
             quote!(
                 impl mlua_extras::typed::Typed for #name {
                     fn ty() -> mlua_extras::typed::Type {
-                        mlua_extras::typed::Type::single(#value)
+                        mlua_extras::typed::Type::Single(#value.into())
                     }
                 }
             )
@@ -59,7 +59,7 @@ pub fn derive_typed(input: TokenStream) -> TokenStream {
                 .map(|(variant, _punc)| {
                     let name = format!("\"{}\"", variant.name);
                     match &variant.fields {
-                        Fields::Unit => quote!{ mlua_extras::typed::Type::single(#name) },
+                        Fields::Unit => quote!{ mlua_extras::typed::Type::Single(#name.into()) },
                         Fields::Tuple(tf) => {
                             let tuple_values = tf.fields.iter().map(|(field, _)| {
                                 let ty = field.ty.clone();

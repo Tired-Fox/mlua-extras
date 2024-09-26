@@ -12,7 +12,7 @@ impl TypedModule for Nested {
                     Ok(())
                 },
                 |func| {
-                    func.param(0, |param| { param.set_name("name").set_doc("Name of the person to greet"); });
+                    func.param(0, |param| param.name("name").doc("Name of the person to greet"));
                 })
     }
 }

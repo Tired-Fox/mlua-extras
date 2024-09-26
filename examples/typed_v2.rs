@@ -1,7 +1,7 @@
 use std::io::stdout;
 
 use mlua::MetaMethod;
-use mlua_extras::typed::{generator::{Definition, DefinitionFileGenerator, Definitions}, TypedModule};
+use mlua_extras::typed::{generator::{Definition, DefinitionFileGenerator, Definitions}, Type, TypedModule};
 
 struct NestedModule;
 impl TypedModule for NestedModule {
@@ -36,11 +36,7 @@ impl TypedModule for TestModule {
         methods
             .document("Greetings")
             .add_function_with("greet", |_, _name: String| { Ok(()) }, |func| {
-                func.param(0, |param| { 
-                    param
-                        .set_doc("Name of the person to greet")
-                        .set_name("name");
-                });
+                func.param(0, |param| param.doc("Name of the person to greet").name("name"));
             })?;
 
         methods
@@ -56,11 +52,11 @@ impl TypedModule for TestModule {
 fn main() {
     let defs = Definitions::start()
         .define("init", Definition::start()
-            .register_module::<TestModule>("test")
+            .module::<TestModule>("test")
             .function::<String, ()>("greet", ())
             .function_with::<String, String, _>("greet", (), |func| {
-                func.param(0, |param| { param.set_name("name").set_doc("Name of the person to greet"); });
-                func.ret(0, |ret| { ret.set_doc("Formatted greeting using the given name"); });
+                func.param(0, |param| param.name("name").doc("Name of the person to greet"));
+                func.ret(0, |ret| ret.doc("Formatted greeting using the given name"));
             })
         )
         .finish();
@@ -69,4 +65,6 @@ fn main() {
         println!("==== {name} ====");
         writer.write(stdout()).unwrap();
     }
+
+    println!("{:#?}", Type::string() | "literal" | true | 0usize | [Type::string(), Type::nil(), Type::literal(3)]);
 }

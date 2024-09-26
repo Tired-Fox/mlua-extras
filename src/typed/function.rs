@@ -4,7 +4,7 @@ use mlua::{FromLua, FromLuaMulti, Function, IntoLua, IntoLuaMulti, Lua, Value};
 
 use crate::MaybeSend;
 
-use super::{Type, Typed, TypedMultiValue};
+use super::{IntoDocComment, Type, Typed, TypedMultiValue};
 
 /// A function parameter type representation
 #[derive(Debug, Clone, PartialEq, PartialOrd, Eq, Ord)]
@@ -18,18 +18,21 @@ pub struct Param {
 
 impl Param {
     /// Set the parameters name
-    pub fn set_name(&mut self, name: impl Into<Cow<'static, str>>) {
+    pub fn name(&mut self, name: impl Into<Cow<'static, str>>) -> &mut Self {
         self.name = Some(name.into());
+        self
     }
 
     /// Set the parameters doc comment
-    pub fn set_doc(&mut self, doc: impl Into<Cow<'static, str>>) {
-        self.doc = Some(doc.into());
+    pub fn doc(&mut self, doc: impl IntoDocComment) -> &mut Self {
+        self.doc = doc.into_doc_comment();
+        self
     }
 
     /// Set the parameters type manually
-    pub fn set_type(&mut self, ty: Type) {
+    pub fn ty(&mut self, ty: Type) -> &mut Self {
         self.ty = ty;
+        self
     }
 }
 
@@ -38,13 +41,20 @@ impl Param {
 pub struct Return {
     pub doc: Option<Cow<'static, str>>,
     ///The type of the return
-    pub(crate) ty: Type,
+    pub ty: Type,
 }
 
 impl Return {
     /// Set the parameters doc comment
-    pub fn set_doc(&mut self, doc: impl Into<Cow<'static, str>>) {
-        self.doc = Some(doc.into());
+    pub fn doc(&mut self, doc: impl IntoDocComment) -> &mut Self {
+        self.doc = doc.into_doc_comment();
+        self
+    }
+    
+    /// Set the parameters doc comment
+    pub fn ty(&mut self, ty: Type) -> &mut Self {
+        self.ty = ty;
+        self
     }
 }
 

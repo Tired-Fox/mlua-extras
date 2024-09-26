@@ -1,6 +1,6 @@
-use std::{any::type_name, borrow::Cow, collections::BTreeMap};
+use std::{any::{type_name, Any}, borrow::Cow, collections::BTreeMap};
 
-use super::{generator::FunctionBuilder, Field, Func, Index, Typed, TypedMultiValue};
+use super::{generator::FunctionBuilder, Field, Func, Index, IntoDocComment, Type, Typed, TypedMultiValue};
 use crate::{
     extras::{Module, ModuleFields, ModuleMethods},
     MaybeSend,
@@ -24,6 +24,12 @@ pub struct TypedModuleBuilder {
 
     queued_doc: Option<String>,
     parents: Vec<&'static str>,
+}
+
+impl From<TypedModuleBuilder> for Type {
+    fn from(value: TypedModuleBuilder) -> Self {
+        Type::Module(Box::new(value))
+    }
 }
 
 impl TypedModuleBuilder {
@@ -54,6 +60,280 @@ impl TypedModuleBuilder {
         self.meta_fields.is_empty()
             && self.meta_functions.is_empty()
             && self.meta_methods.is_empty()
+    }
+
+    /// Creates a new typed field and adds it to the class's type information
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use mlua_extras::typed::{TypedModuleBuilder, Type};
+    ///
+    /// static NAME: &str = "mlua_extras";
+    ///
+    /// TypedModuleBuilder::default()
+    ///     .field("data1", Type::string() | Type::nil(), "doc comment goes last")
+    ///     .field("data2", Type::array(Type::string()), ()) // Can also use `None` instead of `()`
+    ///     .field("message", Type::string(), foramt!("A message for {NAME}"))
+    /// ```
+    pub fn field<S: AsRef<str>>(mut self, name: impl AsRef<str>, ty: Type, doc: impl IntoDocComment) -> Self {
+        self.fields.insert(name.as_ref().to_string().into(), Field::new(ty, doc));
+        self
+    }
+
+    /// Creates a new typed function and adds it to the class's type information
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use mlua_extras::typed::{TypedModuleBuilder, Type};
+    ///
+    /// TypedModuleBuilder::default()
+    ///     .function::<String, ()>("greet", "Greet the given name")
+    ///     // Can use `None` instead of `()` for specifying the doc comment
+    ///     .function::<String, ()>("hello", ())
+    /// ```
+    pub fn function<Params, Returns>(mut self, name: impl AsRef<str>, doc: impl IntoDocComment) -> Self
+    where
+        Params: TypedMultiValue,
+        Returns: TypedMultiValue,
+    {
+        self.functions.insert(name.as_ref().to_string().into(), Func::new::<Params, Returns>(doc));
+        self
+    }
+
+    /// Same as [`function`][TypedModuleBuilder::function] but with an extra generator function
+    /// parameter.
+    ///
+    /// This extra parameter allows for customization of parameter names, types, and doc comments
+    /// along with return types and doc comments.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use mlua_extras::typed::{TypedModuleBuilder, Type};
+    ///
+    /// TypedModuleBuilder::default()
+    ///     // Can use `None` instead of `()` for specifying the doc comment
+    ///     .function_with::<String, String>("getMessage", (), |func| {
+    ///         func.param(0, |param| param.name("name").doc("Name to use when constructing the message"));
+    ///         func.ret(0, |ret| ret.doc("Message constructed using the provided name"))
+    ///     })
+    /// ```
+    pub fn function_with<Params, Returns, F, R>(mut self, name: impl AsRef<str>, doc: impl IntoDocComment, generator: F) -> Self
+    where
+        Params: TypedMultiValue,
+        Returns: TypedMultiValue,
+        F: Fn(&mut FunctionBuilder<Params, Returns>) -> R,
+        R: Any,
+    {
+        let mut builder = FunctionBuilder::default();
+        generator(&mut builder);
+
+        self.functions.insert(name.as_ref().to_string().into(), Func {
+            params: builder.params,
+            returns: builder.returns,
+            doc: doc.into_doc_comment()
+        });
+        self
+    }
+
+    /// Creates a new typed method and adds it to the class's type information.
+    ///
+    /// As with methods in lua, the `self` parameter is implicit and has the same type as the
+    /// parent class.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use mlua_extras::typed::{TypedModuleBuilder, Type};
+    ///
+    /// TypedModuleBuilder::default()
+    ///     .method::<String, ()>("greet", "Greet the given name")
+    ///     // Can use `None` instead of `()` for specifying the doc comment
+    ///     .method::<String, ()>("hello", ())
+    /// ```
+    pub fn method<Params, Returns>(mut self, name: impl AsRef<str>, doc: impl IntoDocComment) -> Self
+    where
+        Params: TypedMultiValue,
+        Returns: TypedMultiValue,
+    {
+        self.methods.insert(name.as_ref().to_string().into(), Func::new::<Params, Returns>(doc));
+        self
+    }
+
+    /// Same as [`method`][TypedModuleBuilder::method] but with an extra generator function
+    /// parameter.
+    ///
+    /// This extra parameter allows for customization of parameter names, types, and doc comments
+    /// along with return types and doc comments.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use mlua_extras::typed::{TypedModuleBuilder, Type};
+    ///
+    /// TypedModuleBuilder::default()
+    ///     // Can use `None` instead of `()` for specifying the doc comment
+    ///     .method_with::<String, String>("getMessage", (), |func| {
+    ///         func.param(0, |param| param.name("name").doc("Name to use when constructing the message"));
+    ///         func.ret(0, |ret| ret.doc("Message constructed using the provided name"))
+    ///     })
+    /// ```
+    pub fn method_with<Params, Returns, F, R>(mut self, name: impl AsRef<str>, doc: impl IntoDocComment, generator: F) -> Self
+    where
+        Params: TypedMultiValue,
+        Returns: TypedMultiValue,
+        F: Fn(&mut FunctionBuilder<Params, Returns>) -> R,
+        R: Any,
+    {
+        let mut builder = FunctionBuilder::default();
+        generator(&mut builder);
+
+        self.methods.insert(name.as_ref().to_string().into(), Func {
+            params: builder.params,
+            returns: builder.returns,
+            doc: doc.into_doc_comment()
+        });
+        self
+    }
+
+    /// Creates a new typed field and adds it to the class's meta type information
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use mlua_extras::typed::{TypedModuleBuilder, Type};
+    ///
+    /// static NAME: &str = "mlua_extras";
+    ///
+    /// TypedModuleBuilder::default()
+    ///     .meta_field("data1", Type::string() | Type::nil(), "doc comment goes last")
+    ///     .meta_field("data2", Type::array(Type::string()), ()) // Can also use `None` instead of `()`
+    ///     .meta_field("message", Type::string(), foramt!("A message for {NAME}"))
+    /// ```
+    pub fn meta_field<S: AsRef<str>>(mut self, name: impl AsRef<str>, ty: Type, doc: impl IntoDocComment) -> Self {
+        self.meta_fields.insert(name.as_ref().to_string().into(), Field::new(ty, doc));
+        self
+    }
+
+    /// Creates a new typed function and adds it to the class's meta type information
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use mlua_extras::typed::{TypedModuleBuilder, Type};
+    ///
+    /// TypedModuleBuilder::default()
+    ///     .meta_function::<String, ()>("greet", "Greet the given name")
+    ///     // Can use `None` instead of `()` for specifying the doc comment
+    ///     .meta_function::<String, ()>("hello", ())
+    /// ```
+    pub fn meta_function<Params, Returns>(mut self, name: impl AsRef<str>, doc: impl IntoDocComment) -> Self
+    where
+        Params: TypedMultiValue,
+        Returns: TypedMultiValue,
+    {
+        self.meta_functions.insert(name.as_ref().to_string().into(), Func::new::<Params, Returns>(doc));
+        self
+    }
+
+    /// Same as [`meta_function`][TypedModuleBuilder::meta_function] but with an extra generator function
+    /// parameter.
+    ///
+    /// This extra parameter allows for customization of parameter names, types, and doc comments
+    /// along with return types and doc comments.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use mlua_extras::typed::{TypedModuleBuilder, Type};
+    ///
+    /// TypedModuleBuilder::default()
+    ///     // Can use `None` instead of `()` for specifying the doc comment
+    ///     .meta_function_with::<String, String>("getMessage", (), |func| {
+    ///         func.param(0, |param| param.name("name").doc("Name to use when constructing the message"));
+    ///         func.ret(0, |ret| ret.doc("Message constructed using the provided name"))
+    ///     })
+    /// ```
+    pub fn meta_function_with<Params, Returns, F, R>(mut self, name: impl AsRef<str>, doc: impl IntoDocComment, generator: F) -> Self
+    where
+        F: Fn(&mut FunctionBuilder<Params, Returns>) -> R,
+        R: Any,
+        Params: TypedMultiValue,
+        Returns: TypedMultiValue,
+    {
+        let mut builder = FunctionBuilder::default();
+        generator(&mut builder);
+
+        self.meta_functions.insert(name.as_ref().to_string().into(), Func {
+            params: builder.params,
+            returns: builder.returns,
+            doc: doc.into_doc_comment()
+        });
+        self
+    }
+
+    /// Creates a new typed method and adds it to the class's type information.
+    ///
+    /// As with methods in lua, the `self` parameter is implicit and has the same type as the
+    /// parent class.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use mlua_extras::typed::{TypedModuleBuilder, Type};
+    ///
+    /// static NAME: &str = "mlua_extras";
+    ///
+    /// TypedModuleBuilder::default()
+    ///     .method::<String, ()>("greet", "Greet the given name")
+    ///     // Can use `None` instead of `()` for specifying the doc comment
+    ///     .method::<String, ()>("hello", ())
+    /// ```
+    pub fn meta_method<Params, Returns>(mut self, name: impl AsRef<str>, doc: impl IntoDocComment) -> Self
+    where
+        Params: TypedMultiValue,
+        Returns: TypedMultiValue,
+    {
+        self.meta_methods.insert(name.as_ref().to_string().into(), Func::new::<Params, Returns>(doc));
+        self
+    }
+
+    /// Same as [`meta_method`][TypedModuleBuilder::meta_method] but with an extra generator function
+    /// parameter.
+    ///
+    /// This extra parameter allows for customization of parameter names, types, and doc comments
+    /// along with return types and doc comments.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use mlua_extras::typed::{TypedModuleBuilder, Type};
+    ///
+    /// TypedModuleBuilder::default()
+    ///     // Can use `None` instead of `()` for specifying the doc comment
+    ///     .meta_method_with::<String, String>("getMessage", (), |func| {
+    ///         func.param(0, |param| param.name("name").doc("Name to use when constructing the message"));
+    ///         func.ret(0, |ret| ret.doc("Message constructed using the provided name"))
+    ///     })
+    /// ```
+    pub fn meta_method_with<Params, Returns, F, R>(mut self, name: impl AsRef<str>, doc: impl IntoDocComment, generator: F) -> Self
+    where
+        F: Fn(&mut FunctionBuilder<Params, Returns>) -> R,
+        R: Any,
+        Params: TypedMultiValue,
+        Returns: TypedMultiValue,
+    {
+        let mut builder = FunctionBuilder::default();
+        generator(&mut builder);
+
+        self.meta_methods.insert(name.as_ref().to_string().into(), Func {
+            params: builder.params,
+            returns: builder.returns,
+            doc: doc.into_doc_comment()
+        });
+        self
     }
 }
 
