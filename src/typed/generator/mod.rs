@@ -1,8 +1,5 @@
 use std::{
-    borrow::Cow,
-    marker::PhantomData,
-    slice::{Iter, IterMut},
-    vec::IntoIter,
+    borrow::Cow, marker::PhantomData, slice::{Iter, IterMut}, vec::IntoIter
 };
 
 use super::{
@@ -18,31 +15,31 @@ pub use type_file::DefinitionFileGenerator;
 ///
 /// This type has a name and additional documentation that can be displayed
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
-pub struct Entry<'def> {
-    pub doc: Option<Cow<'def, str>>,
-    pub name: Cow<'def, str>,
+pub struct Entry {
+    pub doc: Option<String>,
+    pub name: String,
     pub ty: Type,
 }
 
-impl<'def> Entry<'def> {
+impl Entry {
     /// Create a new definition entry without documentation
-    pub fn new(name: impl Into<Cow<'def, str>>, ty: Type) -> Self {
+    pub fn new(name: impl std::fmt::Display, ty: Type) -> Self {
         Self {
             doc: None,
-            name: name.into(),
+            name: name.to_string(),
             ty,
         }
     }
 
     /// Create a new definition entry with documentation
-    pub fn new_with<S: Into<Cow<'def, str>>>(
-        name: impl Into<Cow<'def, str>>,
+    pub fn new_with<S: std::fmt::Display>(
+        name: impl std::fmt::Display,
         ty: Type,
         doc: Option<S>,
     ) -> Self {
         Self {
-            doc: doc.map(|v| v.into()),
-            name: name.into(),
+            doc: doc.map(|v| v.to_string()),
+            name: name.to_string(),
             ty,
         }
     }
@@ -113,14 +110,14 @@ where
 
 /// Builder for definition entries
 #[derive(Default, Debug, Clone)]
-pub struct DefinitionBuilder<'def> {
-    pub entries: Vec<Entry<'def>>,
+pub struct DefinitionBuilder {
+    pub entries: Vec<Entry>,
 }
-impl<'def> DefinitionBuilder<'def> {
+impl DefinitionBuilder {
     /// Register a definition entry that is a function type
     pub fn function<'lua, Params, Returns>(
         mut self,
-        name: impl Into<Cow<'def, str>>,
+        name: impl std::fmt::Display,
         _: impl IntoTypedFunction<'lua, Params, Returns>,
     ) -> Self
     where
@@ -137,7 +134,7 @@ impl<'def> DefinitionBuilder<'def> {
     /// Also add additional documentation
     pub fn function_with<'lua, Params, Returns, F>(
         mut self,
-        name: impl Into<Cow<'def, str>>,
+        name: impl std::fmt::Display,
         _: impl IntoTypedFunction<'lua, Params, Returns>,
         generator: F,
     ) -> Self
@@ -159,32 +156,25 @@ impl<'def> DefinitionBuilder<'def> {
         self
     }
 
-    /// Register a definition entry that is an alias type
-    pub fn alias(mut self, name: impl Into<Cow<'static, str>>, ty: Type) -> Self {
-        self.entries.push(Entry::new(name, Type::alias(ty)));
-        self
-    }
+    /// Register a class or enum type. Otherwise register the type as an alias.
+    pub fn register<T: Typed>(mut self, name: impl Into<Cow<'static, str>>) -> Self {
+        let ty = T::ty();
+        let ty = match &ty {
+            Type::Class(_) | Type::Enum(_) => ty,
+            _ => Type::alias(ty)
+        };
 
-    /// Register a definition entry that is an alias type
-    ///
-    /// Also add additional documentation
-    pub fn alias_with<S: Into<Cow<'def, str>>>(
-        mut self,
-        name: impl Into<Cow<'def, str>>,
-        ty: Type,
-        doc: Option<S>,
-    ) -> Self {
-        self.entries
-            .push(Entry::new_with(name, Type::alias(ty), doc));
-        self
-    }
-
-    /// Register a definition entry that is a class type
-    ///
-    /// The name of the class is the same as the name of the type passed
-    pub fn register(mut self, name: impl Into<Cow<'def, str>>, ty: impl Into<Type>) -> Self {
         self.entries.push(Entry::new(
-            name,
+            name.into(),
+            ty.into(),
+        ));
+        self
+    }
+
+    /// Register a already built type.
+    pub fn register_as(mut self, name: impl Into<Cow<'static, str>>, ty: impl Into<Type>) -> Self {
+        self.entries.push(Entry::new(
+            name.into(),
             ty.into(),
         ));
         self
@@ -193,32 +183,7 @@ impl<'def> DefinitionBuilder<'def> {
     /// Register a definition entry that is a class type
     ///
     /// The name of the class is the same as the name of the type passed
-    pub fn class<T: TypedUserData>(mut self) -> Self {
-        let name = std::any::type_name::<T>();
-        self.entries.push(Entry::new(
-            name.rsplit_once("::").map(|v| v.1).unwrap_or(name),
-            Type::class(TypedClassBuilder::new::<T>()),
-        ));
-        self
-    }
-
-    /// Same as [`class`][DefinitionBuilder::class] but with additional docs
-    pub fn class_with<T: TypedUserData, S: Into<Cow<'def, str>>>(
-        mut self,
-        doc: Option<S>,
-    ) -> Self {
-        self.entries.push(Entry::new_with(
-            std::any::type_name::<T>(),
-            Type::class(TypedClassBuilder::new::<T>()),
-            doc,
-        ));
-        self
-    }
-
-    /// Register a definition entry that is a class type
-    ///
-    /// The name of the class is the same as the name of the type passed
-    pub fn module<T: TypedModule>(mut self, name: impl Into<Cow<'def, str>>) -> Self {
+    pub fn module<T: TypedModule>(mut self, name: impl std::fmt::Display) -> Self {
         self.entries.push(Entry::new(
             name,
             // PERF: Ensure that the builder doesn't need it's error bubbled up another layer
@@ -228,9 +193,9 @@ impl<'def> DefinitionBuilder<'def> {
     }
 
     /// Same as [`module`][DefinitionBuilder::module] but with additional docs
-    pub fn module_with<T: TypedModule, S: Into<Cow<'def, str>>>(
+    pub fn module_with<T: TypedModule, S: std::fmt::Display>(
         mut self,
-        name: impl Into<Cow<'def, str>>,
+        name: impl std::fmt::Display,
         doc: Option<S>,
     ) -> Self {
         self.entries.push(Entry::new_with(
@@ -240,68 +205,6 @@ impl<'def> DefinitionBuilder<'def> {
             doc,
         ));
         self
-    }
-
-    /// Register a definition entry that is a enum type
-    ///
-    /// This is equal to an alias, but is usually derived from using the `Typed` derive macro on an
-    /// enum object.
-    ///
-    /// Returns an error response of [`Error::RuntimeError`][mlua::Error::RuntimeError] if the type extracted was not [`Type::Enum`]
-    ///
-    /// # Example
-    ///
-    /// ```
-    /// use mlua_extras::{Typed, typed::Type};
-    ///
-    /// #[derive(Typed)]
-    /// enum Color {
-    ///     Red,
-    ///     White,
-    ///     Green,
-    ///     Yellow,
-    ///     Cyan,
-    ///     Blue,
-    ///     Magenta,
-    ///     Black
-    /// }
-    ///
-    /// assert!(matches!(Color::ty(), Type::Enum(_, _)))
-    /// ```
-    pub fn r#enum<T: Typed>(mut self) -> mlua::Result<Self> {
-        match T::ty() {
-            Type::Enum(name, types) => {
-                self.entries
-                    .push(Entry::new(name.clone(), Type::Enum(name, types)));
-            }
-            other => {
-                return Err(mlua::Error::runtime(format!(
-                    "expected enum type was: {}",
-                    other.as_ref()
-                )))
-            }
-        }
-        Ok(self)
-    }
-
-    /// Same as [`enum`][DefinitionBuilder::r#enum] but with additional docs
-    pub fn enum_with<T: Typed, S: Into<Cow<'def, str>>>(
-        mut self,
-        doc: Option<S>,
-    ) -> mlua::Result<Self> {
-        match T::ty() {
-            Type::Enum(name, types) => {
-                self.entries
-                    .push(Entry::new_with(name.clone(), Type::Enum(name, types), doc));
-            }
-            other => {
-                return Err(mlua::Error::runtime(format!(
-                    "expected enum type was: {}",
-                    other.as_ref()
-                )))
-            }
-        }
-        Ok(self)
     }
 
     /// Register a value that is available
@@ -355,16 +258,16 @@ impl<'def> DefinitionBuilder<'def> {
     /// --- @type Example
     /// example = nil
     /// ```
-    pub fn value<T: Typed>(mut self, name: impl Into<Cow<'def, str>>) -> Self {
+    pub fn value<T: Typed>(mut self, name: impl std::fmt::Display) -> Self {
         self.entries
             .push(Entry::new(name, Type::Value(Box::new(T::ty()))));
         self
     }
 
     /// Same as [`value`][DefinitionBuilder::value] but with additional docs
-    pub fn value_with<T: Typed, S: Into<Cow<'def, str>>>(
+    pub fn value_with<T: Typed, S: std::fmt::Display>(
         mut self,
-        name: impl Into<Cow<'def, str>>,
+        name: impl std::fmt::Display,
         doc: Option<S>,
     ) -> Self {
         self.entries
@@ -373,7 +276,7 @@ impl<'def> DefinitionBuilder<'def> {
     }
 
     /// Finish the definition
-    pub fn finish(self) -> Definition<'def> {
+    pub fn finish(self) -> Definition {
         Definition {
             entries: self.entries,
         }
@@ -384,12 +287,12 @@ impl<'def> DefinitionBuilder<'def> {
 ///
 /// This is commonly represented as an individual definition file
 #[derive(Default, Debug, Clone)]
-pub struct Definition<'def> {
-    pub entries: Vec<Entry<'def>>,
+pub struct Definition {
+    pub entries: Vec<Entry>,
 }
 
-impl<'def> Definition<'def> {
-    pub fn start() -> DefinitionBuilder<'def> {
+impl Definition {
+    pub fn start() -> DefinitionBuilder {
         DefinitionBuilder::default()
     }
 
@@ -398,38 +301,38 @@ impl<'def> Definition<'def> {
         self.entries.is_empty()
     }
 
-    pub fn iter(&self) -> Iter<'def, Entry<'_>> {
+    pub fn iter(&self) -> Iter<'_, Entry> {
         self.entries.iter()
     }
 }
 
 /// Generate definition entries and definition groups
 #[derive(Default)]
-pub struct DefinitionsBuilder<'def> {
-    definitions: Vec<(Cow<'def, str>, Definition<'def>)>,
+pub struct DefinitionsBuilder {
+    definitions: Vec<(String, Definition)>,
 }
 
-impl<'def> DefinitionsBuilder<'def> {
+impl DefinitionsBuilder {
     /// Creat a new named definition group
     pub fn define(
         mut self,
-        name: impl Into<Cow<'def, str>>,
-        definition: impl Into<Definition<'def>>,
+        name: impl std::fmt::Display,
+        definition: impl Into<Definition>,
     ) -> Self {
-        self.definitions.push((name.into(), definition.into()));
+        self.definitions.push((name.to_string(), definition.into()));
         self
     }
 
     /// Finish defining definition groups and collect them
-    pub fn finish(self) -> Definitions<'def> {
+    pub fn finish(self) -> Definitions {
         Definitions {
             definitions: self.definitions,
         }
     }
 }
 
-impl<'def> From<DefinitionBuilder<'def>> for Definition<'def> {
-    fn from(value: DefinitionBuilder<'def>) -> Self {
+impl From<DefinitionBuilder> for Definition {
+    fn from(value: DefinitionBuilder) -> Self {
         Definition {
             entries: value.entries,
         }
@@ -438,29 +341,29 @@ impl<'def> From<DefinitionBuilder<'def>> for Definition<'def> {
 
 /// A set collection of definition groups
 #[derive(Default, Debug, Clone)]
-pub struct Definitions<'def> {
-    definitions: Vec<(Cow<'def, str>, Definition<'def>)>,
+pub struct Definitions {
+    definitions: Vec<(String, Definition)>,
 }
 
-impl<'def> Definitions<'def> {
+impl Definitions {
     /// Create a definition generator with the given name as the first definition group
-    pub fn start() -> DefinitionsBuilder<'def> {
+    pub fn start() -> DefinitionsBuilder {
         DefinitionsBuilder {
             definitions: Vec::default(),
         }
     }
 
-    pub fn iter(&self) -> Iter<'_, (Cow<'def, str>, Definition<'def>)> {
+    pub fn iter(&self) -> Iter<'_, (String, Definition)> {
         self.definitions.iter()
     }
 
-    pub fn iter_mut(&mut self) -> IterMut<'_, (Cow<'def, str>, Definition<'def>)> {
+    pub fn iter_mut(&mut self) -> IterMut<'_, (String, Definition)> {
         self.definitions.iter_mut()
     }
 }
 
-impl<'def> IntoIterator for Definitions<'def> {
-    type Item = (Cow<'def, str>, Definition<'def>);
+impl IntoIterator for Definitions {
+    type Item = (String, Definition);
     type IntoIter = IntoIter<Self::Item>;
 
     fn into_iter(self) -> Self::IntoIter {

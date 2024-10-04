@@ -260,12 +260,15 @@ impl TypedUserData for Example {
 fn main() -> mlua::Result<()> {
     let definitions = Definitions::generate()
         .define("init", Definition::generate()
-            .register_enum::<SystemColor>()?
-            .register_enum::<Color>()?
-            .register::<Example>()
-            .value_with::<Example, _>("example", ["Example module"])
-            .function_with::<String, (), _>("greet", (), ["Greet the name that was passed in"])
-            .function_with::<Color, (), _>("printColor", (), ["Print a color and it's value"])
+            .register::<SystemColor>("System")?
+            .register::<Color>("Color")?
+            .register::<Example>("Example")
+            .value_with::<Example, _>("example", Some("Example module"))
+            .function::<Color, ()>("printColor", ())
+            .function_with::<String, (), _>("greet", (), |func| {
+                func.document("Greet the name that was passed in");
+                func.param(0, |param| param.name("name").doc("Name of the person to greet"));
+            })
         )
         .finish();
 
@@ -285,7 +288,7 @@ Produces the following definition file
 --- init.d.lua
 --- @meta
 
---- @alias SystemColor "Black"
+--- @alias System "Black"
 ---  | "Red"
 ---  | "Green"
 ---  | "Yellow"
@@ -296,7 +299,7 @@ Produces the following definition file
 
 --- @alias Color SystemColor
 ---  | integer
----  | { [1]: integer, [2]: integer, [3]: integer }
+---  | [integer, integer, integer]
 
 --- This is a doc comment section for the overall type
 --- @class Example
@@ -308,10 +311,9 @@ Produces the following definition file
 example = nil
 
 --- Greet the name that was passed in
---- @param param0 string
-function greet(param0) end
+--- @param name string Name of the person to greet
+function greet(name) end
 
---- Print a color and it's value
 --- @param param0 Color
 function printColor(param0) end
 ```

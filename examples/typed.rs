@@ -158,12 +158,12 @@ fn main() -> mlua::Result<()> {
 
     let definitions = Definitions::start()
         .define("init", Definition::start()
-            .register_enum::<SystemColor>()?
-            .register_enum::<Color>()?
-            .register_class::<Example>()
-            .value::<Example, _>("example")
-            .function::<String, (), _>("greet", ())
-            .function::<Color, (), _>("printColor", ())
+            .register::<SystemColor>("System")
+            .register::<Color>("Color")
+            .register::<Example>("Example")
+            .value::<Example>("example")
+            .function::<String, ()>("greet", ())
+            .function::<Color, ()>("printColor", ())
         )
         .finish();
 

@@ -55,6 +55,7 @@ fn main() {
             .module::<TestModule>("test")
             .function::<String, ()>("greet", ())
             .function_with::<String, String, _>("greet", (), |func| {
+                func.document("Greet the name that was passed in");
                 func.param(0, |param| param.name("name").doc("Name of the person to greet"));
                 func.ret(0, |ret| ret.doc("Formatted greeting using the given name"));
             })
@@ -66,5 +67,5 @@ fn main() {
         writer.write(stdout()).unwrap();
     }
 
-    println!("{:#?}", Type::string() | "literal" | true | 0usize | [Type::string(), Type::nil(), Type::literal(3)]);
+    println!("{:#?}", Type::string() | "literal" | true | 0 | [Type::string(), Type::nil(), Type::literal(3)]);
 }

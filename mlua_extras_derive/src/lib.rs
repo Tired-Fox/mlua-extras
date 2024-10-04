@@ -44,11 +44,10 @@ pub fn derive_typed(input: TokenStream) -> TokenStream {
     match parse_item(input.clone()) {
         Ok(Item::Struct(struct_type)) => {
             let name = struct_type.name.clone();
-            let value = syn::LitStr::new(name.to_string().as_str(), Span::call_site());
             quote!(
                 impl mlua_extras::typed::Typed for #name {
                     fn ty() -> mlua_extras::typed::Type {
-                        mlua_extras::typed::Type::Single(#value.into())
+                        mlua_extras::typed::Type::Class(Box::new(mlua_extras::typed::TypedClassBuilder::new::<#name>()))
                     }
                 }
             )
@@ -92,12 +91,10 @@ pub fn derive_typed(input: TokenStream) -> TokenStream {
 
             // TODO: This should be a union alias
             let name = enum_type.name.clone();
-            let value = name.to_string();
             quote!(
                 impl mlua_extras::typed::Typed for #name {
                     fn ty() -> mlua_extras::typed::Type {
                         mlua_extras::typed::Type::r#enum(
-                            #value,
                             [ #(#variants,)* ]
                         )
                     }

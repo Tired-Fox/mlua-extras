@@ -8,7 +8,7 @@ use crate::{
 use mlua::{FromLuaMulti, IntoLua, IntoLuaMulti};
 
 /// Builder that constructs type and documentation information for a module using the [`TypedModule`] trait
-#[derive(Default, Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Default, Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct TypedModuleBuilder {
     pub doc: Option<Cow<'static, str>>,
 

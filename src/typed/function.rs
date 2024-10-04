@@ -7,7 +7,7 @@ use crate::MaybeSend;
 use super::{IntoDocComment, Type, Typed, TypedMultiValue};
 
 /// A function parameter type representation
-#[derive(Debug, Clone, PartialEq, PartialOrd, Eq, Ord)]
+#[derive(Debug, Clone, PartialEq, PartialOrd, Eq, Ord, Hash)]
 pub struct Param {
     pub doc: Option<Cow<'static, str>>,
     ///If the parameter has a name (will default to Param{number} if None)
@@ -37,7 +37,7 @@ impl Param {
 }
 
 /// A function parameter type representation
-#[derive(Debug, Clone, PartialEq, PartialOrd, Eq, Ord)]
+#[derive(Debug, Clone, PartialEq, PartialOrd, Eq, Ord, Hash)]
 pub struct Return {
     pub doc: Option<Cow<'static, str>>,
     ///The type of the return

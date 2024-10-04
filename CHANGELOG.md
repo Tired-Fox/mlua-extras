@@ -11,6 +11,7 @@
 - Rename `Type::Struct` to `Type::Table`
 - Add better `BitOr` support for anything that can be converted to a `Type`
     - This allows for cool type building ex: `Type::nil() | "literal" | 3 | true | [Type::string(), Type::integer()]`
+- Simplify registering types with the definiton builder
 
 **Fixes**
 

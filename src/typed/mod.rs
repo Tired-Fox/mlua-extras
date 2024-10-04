@@ -255,7 +255,7 @@ impl From<usize> for Index {
 }
 
 /// Representation of a lua type for a rust type
-#[derive(Debug, Clone, PartialEq, strum::AsRefStr, strum::EnumIs, PartialOrd, Eq, Ord)]
+#[derive(Debug, Clone, PartialEq, strum::AsRefStr, strum::EnumIs, PartialOrd, Eq, Ord, Hash)]
 pub enum Type {
     /// Represents a single type. i.e. `string`, `number`, `0`, `"literal"`, `Example`, etc...
     ///
@@ -349,7 +349,7 @@ pub enum Type {
     /// ---  | {type}
     /// ---  | {type}
     /// ```
-    Enum(Cow<'static, str>, Vec<Type>),
+    Enum(Vec<Type>),
     /// Represents a class type
     ///
     /// # Example
@@ -490,10 +490,9 @@ impl Type {
 
     /// Create an enum type. This is equal to an [`alias`][crate::typed::Type::Alias]
     pub fn r#enum(
-        name: impl Into<Cow<'static, str>>,
         types: impl IntoIterator<Item = Type>,
     ) -> Self {
-        Self::Enum(name.into(), types.into_iter().collect())
+        Self::Enum(types.into_iter().collect())
     }
 
     /// Create a type that is an alias. i.e. `--- @alias {name} string`
@@ -675,7 +674,7 @@ impl_typed_multi_value!(A);
 impl_typed_multi_value!();
 
 /// Type information for a lua `class` field
-#[derive(Debug, Clone, PartialEq, PartialOrd, Eq, Ord)]
+#[derive(Debug, Clone, PartialEq, PartialOrd, Eq, Ord, Hash)]
 pub struct Field {
     pub ty: Type,
     pub doc: Option<Cow<'static, str>>,
@@ -691,7 +690,7 @@ impl Field {
 }
 
 /// Type information for a lua `class` function
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Func {
     pub params: Vec<Param>,
     pub returns: Vec<Return>,

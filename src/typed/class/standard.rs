@@ -7,7 +7,7 @@ use crate::{typed::{function::Return, generator::FunctionBuilder, Field, Func, I
 use super::{Typed, TypedDataDocumentation, TypedDataFields, TypedDataMethods, TypedMultiValue, TypedUserData};
 
 /// Type information for a lua `class`. This happens to be a [`TypedUserData`]
-#[derive(Default, Debug, Clone, PartialEq, PartialOrd, Eq, Ord)]
+#[derive(Default, Debug, Clone, PartialEq, PartialOrd, Eq, Ord, Hash)]
 pub struct TypedClassBuilder {
     pub type_doc: Option<Cow<'static, str>>,
     queued_doc: Option<String>,
