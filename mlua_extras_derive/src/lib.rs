@@ -1,6 +1,9 @@
 #[macro_use]
 extern crate quote;
 
+mod lua_user_data;
+mod methods_macro;
+
 use proc_macro::TokenStream;
 use proc_macro2::TokenStream as TokenStream2;
 use proc_macro_error::{proc_macro_error, abort};
@@ -94,7 +97,7 @@ pub fn derive_typed(input: TokenStream) -> TokenStream {
                             ])) }
                         }
                     }
-                    
+
                 })
                 .collect::<Vec<_>>();
 
@@ -113,4 +116,119 @@ pub fn derive_typed(input: TokenStream) -> TokenStream {
         Err(err) => abort!(err.span(), "{}", err),
         _ => abort!(input.span(), "only `struct` and `enum` types are supported for Typed")
     }.into()
+}
+
+/// Derive macro that generates a `TypedUserData` implementation from struct fields.
+///
+/// Each named field is automatically exposed to Lua as a read/write property.
+/// Use `#[mlua_extras(...)]` attributes on fields to control access:
+///
+/// - `#[mlua_extras(skip)]` — field is not exposed to Lua
+/// - `#[mlua_extras(readonly)]` — getter only
+/// - `#[mlua_extras(writeonly)]` — setter only
+/// - `#[mlua_extras(rename = "lua_name")]` — use a different name in Lua
+///
+/// Doc comments on fields are forwarded to the type metadata system.
+///
+/// This also generates the `mlua::UserData` impl, so you do not need to
+/// separately derive `UserData`.
+///
+/// # Example
+///
+/// ```ignore
+/// #[derive(Clone, TypedUserData)]
+/// struct Player {
+///     /// The player's display name
+///     name: String,
+///     health: f64,
+///     #[mlua_extras(skip)]
+///     internal_id: u64,
+///     #[mlua_extras(readonly)]
+///     score: i32,
+///     #[mlua_extras(rename = "pos_x")]
+///     position_x: f64,
+/// }
+/// ```
+///
+/// Optionally combine with [`macro@typed_user_data_impl`] to also register methods.
+/// See `tests/lua_user_data.rs` for more exhaustive examples.
+#[proc_macro_error]
+#[proc_macro_derive(TypedUserData, attributes(mlua_extras))]
+pub fn derive_typed_user_data(input: TokenStream) -> TokenStream {
+    let input = syn::parse_macro_input!(input as syn::DeriveInput);
+    lua_user_data::derive(input).into()
+}
+
+/// Attribute macro that registers methods from an `impl` block for use in Lua.
+///
+/// Place on an `impl` block for a type that derives [`TypedUserData`](macro@TypedUserData).
+/// Annotate individual methods with `#[method]` or `#[metamethod(...)]`.
+///
+/// # Method attributes
+///
+/// - `#[method]` — register as a regular Lua method/function
+/// - `#[method(rename = "lua_name")]` — register under a different Lua name
+/// - `#[metamethod(ToString)]` — register as a metamethod (any `mlua::MetaMethod` variant)
+/// - `#[metamethod("__custom")]` — register a custom-named metamethod
+///
+/// # Receiver handling
+///
+/// - `&self` → `add_method`
+/// - `&mut self` → `add_method_mut`
+/// - no `self` → `add_function`
+/// - `async fn` with `&self` → `add_async_method`
+/// - `async fn` no `self` → `add_async_function`
+///
+/// # Optional `lua` parameter
+///
+/// If the first non-self parameter is named `lua`, it receives the Lua context
+/// from the closure and is not part of the Lua-side argument list.
+///
+/// # Return types
+///
+/// - `-> Result<T, E>` where `E: Into<mlua::Error>` — fallible; the error is
+///   converted via `.into()`. This includes `mlua::Result<T>`, `mlua::Error`,
+///   `anyhow::Error` (with the mlua `anyhow` feature), `std::io::Error`, and
+///   any type implementing mlua's `ExternalError` trait.
+/// - `-> T` — infallible, wrapped in `Ok(...)`
+/// - no return / `-> ()` — returns `Ok(())`
+///
+/// # Example
+///
+/// ```ignore
+/// #[derive(Clone, TypedUserData)]
+/// struct Counter { value: i64 }
+///
+/// #[mlua_extras::typed_user_data_impl]
+/// impl Counter {
+///     #[method]
+///     fn get(&self) -> i64 { self.value }
+///
+///     #[method]
+///     fn increment(&mut self) { self.value += 1; }
+///
+///     #[method]
+///     fn create_table(&self, lua: &mlua::Lua) -> mlua::Result<mlua::Table> {
+///         lua.create_table()
+///     }
+///
+///     #[metamethod(ToString)]
+///     fn to_string(&self) -> String { format!("Counter({})", self.value) }
+///
+///     #[method]
+///     async fn fetch(&self, url: String) -> mlua::Result<String> {
+///         Ok(format!("fetched: {url}"))
+///     }
+/// }
+/// ```
+///
+/// Methods without `#[method]` or `#[metamethod(...)]` are left as normal Rust
+/// methods, callable from Rust but not registered with Lua.
+///
+/// See `tests/lua_user_data.rs` for more exhaustive examples.
+#[proc_macro_error]
+#[proc_macro_attribute]
+pub fn typed_user_data_impl(_attr: TokenStream, item: TokenStream) -> TokenStream {
+    let item = syn::parse_macro_input!(item as syn::ItemImpl);
+    methods_macro::methods_impl(item).into()
 }

@@ -690,18 +690,42 @@ impl_typed_multi_value!(A B);
 impl_typed_multi_value!(A);
 impl_typed_multi_value!();
 
+/// Access mode for a field in a lua `class`
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
+pub enum FieldAccess {
+    #[default]
+    ReadWrite,
+    ReadOnly,
+    WriteOnly,
+}
+
+impl FieldAccess {
+    /// Merge two access modes. If one side is read and the other is write,
+    /// the result is read-write.
+    pub fn merge(self, other: Self) -> Self {
+        match (self, other) {
+            (FieldAccess::ReadOnly, FieldAccess::WriteOnly)
+            | (FieldAccess::WriteOnly, FieldAccess::ReadOnly) => FieldAccess::ReadWrite,
+            (FieldAccess::ReadWrite, _) | (_, FieldAccess::ReadWrite) => FieldAccess::ReadWrite,
+            _ => self,
+        }
+    }
+}
+
 /// Type information for a lua `class` field
 #[derive(Debug, Clone, PartialEq, PartialOrd, Eq, Ord, Hash)]
 pub struct Field {
     pub ty: Type,
     pub doc: Option<Cow<'static, str>>,
+    pub access: FieldAccess,
 }
 
 impl Field {
     pub fn new(ty: Type, doc: impl IntoDocComment) -> Self {
         Self {
             ty,
-            doc: doc.into_doc_comment()
+            doc: doc.into_doc_comment(),
+            access: FieldAccess::default(),
         }
     }
 }

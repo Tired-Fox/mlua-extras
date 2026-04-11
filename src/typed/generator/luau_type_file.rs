@@ -1,6 +1,6 @@
 use std::{cell::RefCell, collections::HashMap, path::Path, slice::Iter};
 
-use crate::typed::{function::Return, Param, Type};
+use crate::typed::{function::Return, FieldAccess, Param, Type};
 
 use super::{Definition, Definitions};
 
@@ -131,7 +131,12 @@ impl<'writer> LuauDefinitionWriter<'writer> {
                             &[field.doc.as_deref()],
                             "\t",
                         )?;
-                        writeln!(buffer, "\t{}: {}", name, self.type_signature(&field.ty)?)?;
+                        let qualifier = match field.access {
+                            FieldAccess::ReadOnly => "read ",
+                            FieldAccess::WriteOnly => "write ",
+                            FieldAccess::ReadWrite => "",
+                        };
+                        writeln!(buffer, "\t{}{}: {}", qualifier, name, self.type_signature(&field.ty)?)?;
                     }
 
                     // Instance fields
@@ -141,7 +146,12 @@ impl<'writer> LuauDefinitionWriter<'writer> {
                             &[field.doc.as_deref()],
                             "\t",
                         )?;
-                        writeln!(buffer, "\t{}: {}", name, self.type_signature(&field.ty)?)?;
+                        let qualifier = match field.access {
+                            FieldAccess::ReadOnly => "read ",
+                            FieldAccess::WriteOnly => "write ",
+                            FieldAccess::ReadWrite => "",
+                        };
+                        writeln!(buffer, "\t{}{}: {}", qualifier, name, self.type_signature(&field.ty)?)?;
                     }
 
                     // Methods (with self)
@@ -168,7 +178,12 @@ impl<'writer> LuauDefinitionWriter<'writer> {
                             &[field.doc.as_deref()],
                             "\t",
                         )?;
-                        writeln!(buffer, "\t{}: {}", name, self.type_signature(&field.ty)?)?;
+                        let qualifier = match field.access {
+                            FieldAccess::ReadOnly => "read ",
+                            FieldAccess::WriteOnly => "write ",
+                            FieldAccess::ReadWrite => "",
+                        };
+                        writeln!(buffer, "\t{}{}: {}", qualifier, name, self.type_signature(&field.ty)?)?;
                     }
 
                     // Meta methods (with self)

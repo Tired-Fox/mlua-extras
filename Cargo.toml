@@ -32,6 +32,7 @@ derive = ["dep:mlua-extras-derive"]
 [dev-dependencies]
 serde = { version = "1.0.228", features = ["derive"] }
 tempfile = "3"
+tokio = { version = "1", features = ["macros", "rt"] }
 
 [dependencies]
 mlua-extras-derive = { path = "./mlua_extras_derive", version = "11.6.0", optional = true }

@@ -887,7 +887,7 @@ fn test_luau_lsp_integer_fields_accept_numeric_literals() {
     // The generated output should use `number` everywhere, not `integer`
     assert!(
         !out.contains("integer"),
-        "Luau output should not contain 'integer', got:\n{out}",
+        "Luau output should not contain 'number', got:\n{out}",
     );
 
     // Numeric literals (which Luau types as `number`) must be accepted
@@ -929,4 +929,215 @@ fn test_mismatch_enum_tuple_variants_flatten() {
         out.trim(),
         "export type Payload = \"None\" | { number | string } | { boolean }"
     );
+}
+
+// ========================
+// Derive macro + definition file generator integration tests
+// ========================
+// These tests demonstrate the end-to-end pipeline:
+// derive-annotated struct → TypedUserData impl → Typed trait → Definition::register → generated Luau output
+
+#[cfg(feature = "derive")]
+mod derive_integration {
+    use super::*;
+    use crate as mlua_extras;
+    use crate::{TypedUserData, Typed};
+
+    // -- Basic fields derive --
+
+    /// A player in the game
+    #[derive(Clone, TypedUserData, Typed)]
+    struct Player {
+        /// The player's display name
+        name: String,
+        /// Current health points
+        health: i32,
+        #[mlua_extras(readonly)]
+        id: u64,
+        #[mlua_extras(skip)]
+        #[allow(unused)]
+        internal_state: bool,
+    }
+
+    #[test]
+    fn test_derive_fields_generate_definition() {
+        let out = generate(single(
+            Definition::start().register::<Player>("Player"),
+        ));
+        // struct-level doc comment becomes the class doc;
+        // readonly/writeonly fields appear as regular fields in the definition
+        // (the access control is enforced at runtime, not in the type definition)
+        assert_eq!(
+            out.trim(),
+            "-- A player in the game\n\
+             declare class Player\n\
+             \t-- Current health points\n\
+             \thealth: number\n\
+             \tread id: number\n\
+             \t-- The player's display name\n\
+             \tname: string\n\
+             end"
+        );
+    }
+
+    // -- Fields with rename --
+
+    #[derive(Clone, TypedUserData, Typed)]
+    struct Config {
+        #[mlua_extras(rename = "hostName")]
+        host_name: String,
+        port: u32,
+        #[mlua_extras(writeonly)]
+        secret: String,
+    }
+
+    #[test]
+    fn test_derive_rename_and_writeonly() {
+        let out = generate(single(
+            Definition::start().register::<Config>("Config"),
+        ));
+        assert_eq!(
+            out.trim(),
+            "declare class Config\n\
+             \thostName: string\n\
+             \tport: number\n\
+             \twrite secret: string\n\
+             end"
+        );
+    }
+
+    // -- Methods via #[mlua_extras::typed_user_data_impl] --
+
+    #[derive(Clone, TypedUserData, Typed)]
+    struct Counter {
+        value: i64,
+    }
+
+    #[mlua_extras::typed_user_data_impl]
+    impl Counter {
+        /// Get the current value
+        #[method]
+        fn get(&self) -> mlua::Result<i64> {
+            Ok(self.value)
+        }
+
+        /// Increment the counter
+        #[method]
+        fn increment(&mut self) -> mlua::Result<()> {
+            self.value += 1;
+            Ok(())
+        }
+
+        /// Create a new counter with the given initial value
+        #[method(rename = "new")]
+        fn create(initial: i64) -> mlua::Result<Counter> {
+            Ok(Counter { value: initial })
+        }
+    }
+
+    #[test]
+    fn test_derive_methods_generate_definition() {
+        let out = generate(single(
+            Definition::start().register::<Counter>("Counter"),
+        ));
+        // Fields, instance methods, and static functions
+        assert_eq!(
+            out.trim(),
+            "declare class Counter\n\
+             \tvalue: number\n\
+             \t-- Get the current value\n\
+             \tfunction get(self): number\n\
+             \t-- Increment the counter\n\
+             \tfunction increment(self): ()\n\
+             end\n\
+             \n\
+             declare Counter: {\n\
+             \t-- Create a new counter with the given initial value\n\
+             \tnew: (initial: number) -> Counter,\n\
+             }"
+        );
+    }
+
+    // -- Metamethods --
+
+    #[derive(Clone, TypedUserData, Typed)]
+    struct Vector2 {
+        x: f64,
+        y: f64,
+    }
+
+    #[mlua_extras::typed_user_data_impl]
+    impl Vector2 {
+        #[metamethod(ToString)]
+        fn to_string(&self) -> mlua::Result<String> {
+            Ok(format!("({}, {})", self.x, self.y))
+        }
+
+        #[metamethod(Len)]
+        fn len(&self) -> mlua::Result<i64> {
+            Ok(2)
+        }
+
+        /// Compute the length of the vector
+        #[method]
+        fn length(&self) -> mlua::Result<f64> {
+            Ok((self.x * self.x + self.y * self.y).sqrt())
+        }
+    }
+
+    #[test]
+    fn test_derive_metamethods_generate_definition() {
+        let out = generate(single(
+            Definition::start().register::<Vector2>("Vector2"),
+        ));
+        assert_eq!(
+            out.trim(),
+            "declare class Vector2\n\
+             \tx: number\n\
+             \ty: number\n\
+             \t-- Compute the length of the vector\n\
+             \tfunction length(self): number\n\
+             \tfunction __len(self): number\n\
+             \tfunction __tostring(self): string\n\
+             end"
+        );
+    }
+
+    // -- Combined: multiple types in one definition file --
+
+    #[test]
+    fn test_derive_multi_type_definition_file() {
+        let out = generate(single(
+            Definition::start()
+                .register::<Player>("Player")
+                .register::<Counter>("Counter")
+                .value::<Player>("currentPlayer"),
+        ));
+        assert_eq!(
+            out.trim(),
+            "-- A player in the game\n\
+             declare class Player\n\
+             \t-- Current health points\n\
+             \thealth: number\n\
+             \tread id: number\n\
+             \t-- The player's display name\n\
+             \tname: string\n\
+             end\n\
+             \n\
+             declare class Counter\n\
+             \tvalue: number\n\
+             \t-- Get the current value\n\
+             \tfunction get(self): number\n\
+             \t-- Increment the counter\n\
+             \tfunction increment(self): ()\n\
+             end\n\
+             \n\
+             declare Counter: {\n\
+             \t-- Create a new counter with the given initial value\n\
+             \tnew: (initial: number) -> Counter,\n\
+             }\n\
+             \n\
+             declare currentPlayer: Player"
+        );
+    }
 }

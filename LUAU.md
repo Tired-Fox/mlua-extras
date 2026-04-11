@@ -250,4 +250,3 @@ mlua-extras `Type` enum and would require model changes to support:
 - **Type packs** — `declare function pcall<A..., R...>(f: (A...) -> R..., ...: A...): (boolean, R...)`
 - **Class inheritance** — `declare class Dog extends Animal`
 - **Intersection types** — `((string) -> number) & ((number) -> string)`
-- **Read/write property modifiers** — `read name: string`

@@ -3,7 +3,7 @@ use std::{borrow::Cow, collections::BTreeMap};
 use mlua::{AnyUserData, FromLua, FromLuaMulti, IntoLua, IntoLuaMulti, Lua};
 
 use crate::{
-    typed::{Field, Func, Index, IntoDocComment, Type},
+    typed::{Field, FieldAccess, Func, Index, IntoDocComment, Type},
     MaybeSend,
 };
 
@@ -253,10 +253,12 @@ impl<T: TypedUserData> TypedDataFields<T> for TypedClassBuilder {
             .and_modify(|v| {
                 v.doc = self.queued_doc.take().map(|v| v.into());
                 v.ty = v.ty.clone() | V::ty();
+                v.access = v.access.merge(FieldAccess::ReadWrite);
             })
             .or_insert(Field {
                 ty: V::ty(),
                 doc: self.queued_doc.take().map(|v| v.into()),
+                access: FieldAccess::ReadWrite,
             });
     }
 
@@ -272,10 +274,12 @@ impl<T: TypedUserData> TypedDataFields<T> for TypedClassBuilder {
             .and_modify(|v| {
                 v.doc = self.queued_doc.take().map(|v| v.into());
                 v.ty = v.ty.clone() | A::ty();
+                v.access = v.access.merge(FieldAccess::WriteOnly);
             })
             .or_insert(Field {
                 ty: A::ty(),
                 doc: self.queued_doc.take().map(|v| v.into()),
+                access: FieldAccess::WriteOnly,
             });
     }
 
@@ -291,10 +295,12 @@ impl<T: TypedUserData> TypedDataFields<T> for TypedClassBuilder {
             .and_modify(|v| {
                 v.doc = self.queued_doc.take().map(|v| v.into());
                 v.ty = v.ty.clone() | R::ty();
+                v.access = v.access.merge(FieldAccess::ReadOnly);
             })
             .or_insert(Field {
                 ty: R::ty(),
                 doc: self.queued_doc.take().map(|v| v.into()),
+                access: FieldAccess::ReadOnly,
             });
     }
 
@@ -312,10 +318,12 @@ impl<T: TypedUserData> TypedDataFields<T> for TypedClassBuilder {
             .and_modify(|v| {
                 v.doc = self.queued_doc.take().map(|v| v.into());
                 v.ty = v.ty.clone() | A::ty() | R::ty();
+                v.access = v.access.merge(FieldAccess::ReadWrite);
             })
             .or_insert(Field {
                 ty: A::ty() | R::ty(),
                 doc: self.queued_doc.take().map(|v| v.into()),
+                access: FieldAccess::ReadWrite,
             });
     }
 
@@ -331,10 +339,12 @@ impl<T: TypedUserData> TypedDataFields<T> for TypedClassBuilder {
             .and_modify(|v| {
                 v.doc = self.queued_doc.take().map(|v| v.into());
                 v.ty = v.ty.clone() | A::ty();
+                v.access = v.access.merge(FieldAccess::WriteOnly);
             })
             .or_insert(Field {
                 ty: A::ty(),
                 doc: self.queued_doc.take().map(|v| v.into()),
+                access: FieldAccess::WriteOnly,
             });
     }
 
@@ -350,10 +360,12 @@ impl<T: TypedUserData> TypedDataFields<T> for TypedClassBuilder {
             .and_modify(|v| {
                 v.doc = self.queued_doc.take().map(|v| v.into());
                 v.ty = v.ty.clone() | R::ty();
+                v.access = v.access.merge(FieldAccess::ReadOnly);
             })
             .or_insert(Field {
                 ty: R::ty(),
                 doc: self.queued_doc.take().map(|v| v.into()),
+                access: FieldAccess::ReadOnly,
             });
     }
 
@@ -371,10 +383,12 @@ impl<T: TypedUserData> TypedDataFields<T> for TypedClassBuilder {
             .and_modify(|v| {
                 v.doc = self.queued_doc.take().map(|v| v.into());
                 v.ty = v.ty.clone() | A::ty() | R::ty();
+                v.access = v.access.merge(FieldAccess::ReadWrite);
             })
             .or_insert(Field {
                 ty: A::ty() | R::ty(),
                 doc: self.queued_doc.take().map(|v| v.into()),
+                access: FieldAccess::ReadWrite,
             });
     }
 
@@ -392,6 +406,7 @@ impl<T: TypedUserData> TypedDataFields<T> for TypedClassBuilder {
             .or_insert(Field {
                 ty: V::ty(),
                 doc: self.queued_doc.take().map(|v| v.into()),
+                access: FieldAccess::ReadWrite,
             });
     }
 
@@ -410,6 +425,7 @@ impl<T: TypedUserData> TypedDataFields<T> for TypedClassBuilder {
             .or_insert(Field {
                 ty: R::ty(),
                 doc: self.queued_doc.take().map(|v| v.into()),
+                access: FieldAccess::ReadWrite,
             });
     }
 }
