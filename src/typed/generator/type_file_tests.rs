@@ -1,7 +1,7 @@
 #![cfg(test)]
 
 use crate::typed::{
-    Index, Param, Type, TypedClassBuilder,
+    Index, Param, Type, Typed, TypedClassBuilder, TypedUserData,
     function::Return,
     generator::{Definition, DefinitionBuilder, DefinitionFileGenerator, Definitions, Entry},
 };
@@ -897,6 +897,79 @@ fn test_enum_referenced_in_value() {
 
 --- @type Color
 defaultColor = nil"#
+    );
+}
+
+/// Verify user data maps correctly
+/// This tests a custom struct TestUserData, including attrs, functions and methods
+/// It also test UserDataRef and UserDataRefMut in the function / method
+#[test]
+fn test_user_data() {
+    struct TestUserData {
+        attr: String,
+    }
+    impl mlua::UserData for TestUserData {}
+
+    impl Typed for TestUserData {
+        fn ty() -> Type {
+            Type::class(TypedClassBuilder::new::<Self>().build())
+        }
+
+        fn as_param() -> Type {
+            Type::named("TestUserData")
+        }
+
+        fn as_return() -> Type {
+            Self::as_param()
+        }
+    }
+
+    impl TypedUserData for TestUserData {
+        fn add_documentation<F: crate::typed::TypedDataDocumentation<Self>>(docs: &mut F) {
+            docs.add("class doc test");
+        }
+
+        fn add_fields<F: crate::typed::TypedDataFields<Self>>(fields: &mut F) {
+            fields.document("attr doc test");
+            fields.add_field_method_get("attr", |_, this| Ok(this.attr.clone()));
+        }
+
+        fn add_methods<T: crate::typed::TypedDataMethods<Self>>(methods: &mut T) {
+            methods.document("function doc test");
+            methods.add_function("from", |_, other: mlua::UserDataRef<Self>| {
+                Ok(Self {
+                    attr: other.attr.clone(),
+                })
+            });
+            methods.document("method doc test");
+            methods.add_method("to", |_, this, mut other: mlua::UserDataRefMut<Self>| {
+                (*other).attr = this.attr.clone();
+                Ok(())
+            });
+        }
+    }
+
+    let out = generate(single(
+        Definition::start().register_as("TestUserData", TestUserData::ty()),
+    ));
+    assert_eq!(
+        out.trim(),
+        r#"--- @meta
+
+--- class doc test
+--- @class TestUserData
+--- attr doc test
+--- @field attr string
+local _CLASS_TestUserData_ = {
+	--- function doc test
+	--- @param param1 TestUserData
+	--- @return TestUserData
+	from = function(param1) end,
+	--- method doc test
+	--- @param self TestUserData
+	--- @param param1 TestUserData
+	to = function(self, param1) end,
+}"#
     );
 }
 

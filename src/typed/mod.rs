@@ -16,7 +16,7 @@ use std::{sync::{Arc, Mutex}, cell::{Cell, RefCell}, rc::Rc};
 
 pub use function::{Param, Return, TypedFunction};
 
-use mlua::{IntoLua, MetaMethod, Value, Variadic};
+use mlua::{IntoLua, MetaMethod, UserDataRef, UserDataRefMut, Value, Variadic};
 
 /// Represents a lua table key
 ///
@@ -505,6 +505,34 @@ impl_static_typed_generic! {
 impl Typed for mlua::Value {
     fn ty() -> Type {
         Type::Single("any".into())
+    }
+}
+
+impl<T: Typed> Typed for UserDataRef<T> {
+    fn ty() -> Type {
+        T::ty()
+    }
+
+    fn as_param() -> Type {
+        T::as_param()
+    }
+
+    fn as_return() -> Type {
+        T::as_return()
+    }
+}
+
+impl<T: Typed> Typed for UserDataRefMut<T> {
+    fn ty() -> Type {
+        T::ty()
+    }
+
+    fn as_param() -> Type {
+        T::as_param()
+    }
+
+    fn as_return() -> Type {
+        T::as_return()
     }
 }
 

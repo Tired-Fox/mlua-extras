@@ -2,7 +2,7 @@
 #![cfg(feature = "luau")]
 
 use crate::typed::{
-    Field, Func, Index, Param, Type, TypedClassBuilder,
+    Field, Func, Index, Param, Type, Typed, TypedClassBuilder, TypedUserData,
     function::Return,
     generator::{Definition, DefinitionBuilder, Definitions, Entry, LuauDefinitionFileGenerator},
 };
@@ -904,5 +904,77 @@ fn test_mismatch_enum_tuple_variants_flatten() {
     assert_eq!(
         out.trim(),
         "export type Payload = \"None\" | { number | string } | { boolean }"
+    );
+}
+
+/// Verify user data maps correctly
+/// This tests a custom struct TestUserData, including attrs, functions and methods
+/// It also test UserDataRef and UserDataRefMut in the function / method
+#[test]
+fn test_user_data() {
+    struct TestUserData {
+        attr: String,
+    }
+
+    impl mlua::UserData for TestUserData {}
+
+    impl Typed for TestUserData {
+        fn ty() -> Type {
+            Type::class(TypedClassBuilder::new::<Self>().build())
+        }
+
+        fn as_param() -> Type {
+            Type::named("TestUserData")
+        }
+
+        fn as_return() -> Type {
+            Self::as_param()
+        }
+    }
+
+    impl TypedUserData for TestUserData {
+        fn add_documentation<F: crate::typed::TypedDataDocumentation<Self>>(docs: &mut F) {
+            docs.add("class doc test");
+        }
+
+        fn add_fields<F: crate::typed::TypedDataFields<Self>>(fields: &mut F) {
+            fields.document("attr doc test");
+            fields.add_field_method_get("attr", |_, this| Ok(this.attr.clone()));
+        }
+
+        fn add_methods<T: crate::typed::TypedDataMethods<Self>>(methods: &mut T) {
+            methods.document("function doc test");
+            methods.add_function("from", |_, other: mlua::UserDataRef<Self>| {
+                Ok(Self {
+                    attr: other.attr.clone(),
+                })
+            });
+            methods.document("method doc test");
+            methods.add_method("to", |_, this, mut other: mlua::UserDataRefMut<Self>| {
+                (*other).attr = this.attr.clone();
+                Ok(())
+            });
+        }
+    }
+
+    let out = generate(single(
+        Definition::start().register_as("TestUserData", TestUserData::ty()),
+    ));
+    assert_eq!(
+        out.trim(),
+        r#"-- class doc test
+declare class TestUserData
+	-- attr doc test
+	attr: string
+	-- method doc test
+	function to(self, param1: TestUserData): ()
+end
+
+-- function doc test
+declare function TestUserData_from(param1: TestUserData): TestUserData
+
+declare TestUserData: {
+	from: typeof(TestUserData_from),
+}"#
     );
 }
