@@ -4,13 +4,13 @@ use mlua::{UserDataRef, UserDataRefMut};
 
 use crate::{MaybeSend, typed::IntoDocComment};
 
-use super::{Typed, TypedMultiValue, Type};
+use super::{Type, Typed, TypedMultiValue};
 
-mod wrapped;
 mod standard;
+mod wrapped;
 
+pub use standard::{TypedClass, TypedClassBuilder};
 pub use wrapped::WrappedBuilder;
-pub use standard::{TypedClassBuilder, TypedClass};
 
 /// Typed variant of [`mlua::UserData`]
 pub trait TypedUserData: Sized {
@@ -136,24 +136,29 @@ pub trait TypedDataMethods<T> {
     fn document(&mut self, doc: impl IntoDocComment) -> &mut Self;
 
     /// Adds a param name and doc comment to the next method/function that gets added.
-    /// 
+    ///
     /// These will be applied to the params in the order they were defined.
     fn param(&mut self, name: impl std::fmt::Display, doc: impl IntoDocComment) -> &mut Self;
 
     /// Adds a param name and doc comment to the next method/function that gets added.
     /// Will also add an override type to the param.
-    /// 
+    ///
     /// These will be applied to the params in the order they were defined.
-    fn param_as(&mut self, ty: impl Into<Type>, name: impl std::fmt::Display, doc: impl IntoDocComment) -> &mut Self;
+    fn param_as(
+        &mut self,
+        ty: impl Into<Type>,
+        name: impl std::fmt::Display,
+        doc: impl IntoDocComment,
+    ) -> &mut Self;
 
     /// Adds a return doc comment to the next method/function that gets added.
-    /// 
+    ///
     /// These will be applied to the returns in the order they were defined.
     fn ret(&mut self, doc: impl IntoDocComment) -> &mut Self;
-    
+
     /// Adds a return doc comment to the next method/function that gets added.
     /// Will also add an override type to the return.
-    /// 
+    ///
     /// These will be applied to the returns in the order they were defined.
     fn ret_as(&mut self, ty: impl Into<Type>, doc: impl IntoDocComment) -> &mut Self;
 
@@ -170,7 +175,7 @@ pub trait TypedDataFields<T> {
     fn document(&mut self, doc: impl IntoDocComment) -> &mut Self;
 
     /// Adds a type to the queued overrides.
-    /// 
+    ///
     /// It will be used on the next field and will override the type that is automatically used.
     fn coerce(&mut self, ty: impl Into<Type>) -> &mut Self;
 
@@ -199,8 +204,8 @@ pub trait TypedDataFields<T> {
         S: Into<String>,
         R: IntoLua + Typed,
         A: FromLua + Typed,
-        GET: 'static + MaybeSend + Fn(& Lua, &T) -> mlua::Result<R>,
-        SET: 'static + MaybeSend + Fn(& Lua, &mut T, A) -> mlua::Result<()>;
+        GET: 'static + MaybeSend + Fn(&Lua, &T) -> mlua::Result<R>,
+        SET: 'static + MaybeSend + Fn(&Lua, &mut T, A) -> mlua::Result<()>;
 
     /// Typed version of [add_field_function_get](mlua::UserDataFields::add_field_function_get)
     fn add_field_function_get<S, R, F>(&mut self, name: S, function: F)
@@ -227,7 +232,8 @@ pub trait TypedDataFields<T> {
 
     /// Typed version of [add_meta_field](mlua::UserDataFields::add_meta_field)
     fn add_meta_field<V>(&mut self, meta: impl Into<String>, value: V)
-    where V: IntoLua + Typed + 'static;
+    where
+        V: IntoLua + Typed + 'static;
 
     /// Typed version of [add_meta_field](mlua::UserDataFields::add_meta_field_with)
     fn add_meta_field_with<R, F>(&mut self, meta: impl Into<String>, f: F)

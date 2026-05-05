@@ -10,7 +10,9 @@ use mlua_extras::{
 
 /// Simple Counter
 #[derive(Clone, TypedUserData)]
-struct Counter { value: i64 }
+struct Counter {
+    value: i64,
+}
 
 #[typed_user_data_impl]
 impl Counter {
@@ -42,11 +44,15 @@ impl Counter {
 
     /// Get the current counter value
     #[method]
-    fn get(&self) -> i64 { self.value }
+    fn get(&self) -> i64 {
+        self.value
+    }
 
     /// Increment the counter
     #[method]
-    fn increment(&mut self) { self.value += 1 }
+    fn increment(&mut self) {
+        self.value += 1
+    }
 
     /// Create a new table
     #[method]
@@ -56,7 +62,9 @@ impl Counter {
 
     /// String representation of the counter
     #[metamethod(ToString)]
-    fn to_string(&self) -> String { format!("Counter({})", self.value) }
+    fn to_string(&self) -> String {
+        format!("Counter({})", self.value)
+    }
 
     // Requires the `async` feature
     // Must be accessed from lua code with an entry of `mlua::Chunk::eval_async` or `mlua::Chunk::exec_async`
@@ -71,11 +79,7 @@ impl Counter {
 
 fn main() -> mlua::Result<()> {
     let definitions: Definitions = Definitions::start()
-        .define(
-            "macros",
-            Definition::start()
-                .register::<Counter>("Counter")
-        )
+        .define("macros", Definition::start().register::<Counter>("Counter"))
         .finish();
 
     let types_path = PathBuf::from("examples/types");

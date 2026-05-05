@@ -6,8 +6,8 @@ use std::{
 };
 
 use super::{
-    function::{IntoTypedFunction, Return},
     Param, Type, Typed, TypedMultiValue,
+    function::{IntoTypedFunction, Return},
 };
 
 mod type_file;
@@ -149,7 +149,7 @@ impl DefinitionBuilder {
                 self.queued_params.drain(..).collect(),
                 self.queued_returns.drain(..).collect(),
             ),
-            self.queued_doc.take()
+            self.queued_doc.take(),
         ));
         self
     }
@@ -240,7 +240,11 @@ impl DefinitionBuilder {
     /// example = nil
     /// ```
     pub fn value<T: Typed>(mut self, name: impl std::fmt::Display) -> Self {
-        self.entries.push(Entry::new_with(name, Type::Value(Box::new(T::ty())), self.queued_doc.take()));
+        self.entries.push(Entry::new_with(
+            name,
+            Type::Value(Box::new(T::ty())),
+            self.queued_doc.take(),
+        ));
         self
     }
 

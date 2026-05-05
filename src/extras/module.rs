@@ -55,7 +55,7 @@ pub trait Module: Sized {
     fn add_fields<F: ModuleFields>(fields: &mut F) -> mlua::Result<()> {
         Ok(())
     }
-    
+
     /// Add methods/functions to the module
     #[allow(unused_variables)]
     fn add_methods<M: ModuleMethods>(methods: &mut M) -> mlua::Result<()> {

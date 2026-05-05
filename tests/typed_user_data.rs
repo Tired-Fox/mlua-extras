@@ -435,7 +435,10 @@ fn test_static_meta_functions() {
     let result: Vec2 = lua.load("return vec2(1, 2) + vec2(3, 4)").eval().unwrap();
     assert_eq!(result, Vec2(4.0, 6.0));
 
-    let result: f64 = lua.load("return dot(vec2(2, 4), vec2(4, 2))").eval().unwrap();
+    let result: f64 = lua
+        .load("return dot(vec2(2, 4), vec2(4, 2))")
+        .eval()
+        .unwrap();
     assert_eq!(result, 16.0);
 }
 

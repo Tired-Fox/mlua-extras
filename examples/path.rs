@@ -23,10 +23,13 @@ fn main() -> mlua::Result<()> {
     lua.append_cpath(PathBuf::from("examples").join("?.dll"))?;
     lua.append_cpath(PathBuf::from("examples").join("?.lib"))?;
 
-    lua.load(r#"
+    lua.load(
+        r#"
     print(package.path, '\n')
     print(package.cpath, '\n')
-    "#).eval::<()>()?;
+    "#,
+    )
+    .eval::<()>()?;
 
     // Set globals in with shorthand helpers
     lua.set_global("key", "value")?;

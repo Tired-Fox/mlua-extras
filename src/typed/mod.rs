@@ -4,15 +4,21 @@ pub mod generator;
 mod class;
 
 pub use class::{
-    TypedClassBuilder, TypedClass, TypedDataDocumentation, TypedDataFields, TypedDataMethods, TypedUserData,
-    WrappedBuilder,
+    TypedClass, TypedClassBuilder, TypedDataDocumentation, TypedDataFields, TypedDataMethods,
+    TypedUserData, WrappedBuilder,
 };
 
 use std::{
-    borrow::Cow, collections::{BTreeMap, BTreeSet, HashMap, HashSet}, marker::PhantomData
+    borrow::Cow,
+    collections::{BTreeMap, BTreeSet, HashMap, HashSet},
+    marker::PhantomData,
 };
-#[cfg(feature="userdata-wrappers")]
-use std::{sync::{Arc, Mutex}, cell::{Cell, RefCell}, rc::Rc};
+#[cfg(feature = "userdata-wrappers")]
+use std::{
+    cell::{Cell, RefCell},
+    rc::Rc,
+    sync::{Arc, Mutex},
+};
 
 pub use function::{Param, Return, TypedFunction};
 
@@ -719,7 +725,7 @@ where
 
 // External Types
 
-#[cfg(feature="userdata-wrappers")]
+#[cfg(feature = "userdata-wrappers")]
 impl<T: Typed> Typed for Arc<T> {
     fn ty() -> Type {
         T::ty()
@@ -734,7 +740,7 @@ impl<T: Typed> Typed for Arc<T> {
     }
 }
 
-#[cfg(feature="userdata-wrappers")]
+#[cfg(feature = "userdata-wrappers")]
 impl<T: Typed> Typed for Rc<T> {
     fn ty() -> Type {
         T::ty()
@@ -749,7 +755,7 @@ impl<T: Typed> Typed for Rc<T> {
     }
 }
 
-#[cfg(feature="userdata-wrappers")]
+#[cfg(feature = "userdata-wrappers")]
 impl<T: Typed> Typed for Cell<T> {
     fn ty() -> Type {
         T::ty()
@@ -764,7 +770,7 @@ impl<T: Typed> Typed for Cell<T> {
     }
 }
 
-#[cfg(feature="userdata-wrappers")]
+#[cfg(feature = "userdata-wrappers")]
 impl<T: Typed> Typed for RefCell<T> {
     fn ty() -> Type {
         T::ty()
@@ -779,7 +785,7 @@ impl<T: Typed> Typed for RefCell<T> {
     }
 }
 
-#[cfg(feature="userdata-wrappers")]
+#[cfg(feature = "userdata-wrappers")]
 impl<T: Typed> Typed for Mutex<T> {
     fn ty() -> Type {
         T::ty()
@@ -854,11 +860,18 @@ where
     A: Typed,
 {
     fn get_types_as_params() -> Vec<Param> {
-        Vec::from([Param { name: None, doc: None, ty: A::as_param()}])
+        Vec::from([Param {
+            name: None,
+            doc: None,
+            ty: A::as_param(),
+        }])
     }
 
     fn get_types_as_returns() -> Vec<Return> {
-        Vec::from([Return { doc: None, ty: A::as_return() }])
+        Vec::from([Return {
+            doc: None,
+            ty: A::as_return(),
+        }])
     }
 }
 
@@ -911,7 +924,7 @@ impl StaticField {
                 ty,
                 doc: doc.into_doc_comment(),
             },
-            default: default.into()
+            default: default.into(),
         }
     }
 }

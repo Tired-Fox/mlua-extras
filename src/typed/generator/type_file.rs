@@ -77,7 +77,10 @@ impl<'def> Iterator for DefinitionFileIter<'def> {
         self.definitions.next().map(|v| {
             (
                 format!("{}{}", v.0, self.extension),
-                DefinitionWriter { definition: &v.1, name_map: RefCell::new(HashMap::default()) },
+                DefinitionWriter {
+                    definition: &v.1,
+                    name_map: RefCell::new(HashMap::default()),
+                },
             )
         })
     }
@@ -114,11 +117,14 @@ impl<'writer> DefinitionWriter<'writer> {
                     writeln!(buffer, "{} = nil", definition.name)?;
                 }
                 Type::Class(type_data) => {
-                    self.name_map.borrow_mut().insert(definition.ty.clone(), definition.name.clone());
+                    self.name_map
+                        .borrow_mut()
+                        .insert(definition.ty.clone(), definition.name.clone());
 
-                    if let Some(docs) =
-                        self.accumulate_docs(&[definition.doc.as_deref(), type_data.type_doc.as_deref()])
-                    {
+                    if let Some(docs) = self.accumulate_docs(&[
+                        definition.doc.as_deref(),
+                        type_data.type_doc.as_deref(),
+                    ]) {
                         writeln!(buffer, "{}", docs.join("\n"))?;
                     }
                     write!(buffer, "--- @class {}", definition.name)?;
@@ -138,9 +144,20 @@ impl<'writer> DefinitionWriter<'writer> {
                         )?;
                     }
 
-                    if !type_data.static_fields.is_empty() || !type_data.functions.is_empty() || !type_data.methods.is_empty() || !type_data.is_meta_empty() {
+                    if !type_data.static_fields.is_empty()
+                        || !type_data.functions.is_empty()
+                        || !type_data.methods.is_empty()
+                        || !type_data.is_meta_empty()
+                    {
                         writeln!(buffer, "local _CLASS_{}_ = {{", definition.name)?;
-                        for (name, StaticField { inner: Field { doc, .. }, default }) in type_data.static_fields.iter() {
+                        for (
+                            name,
+                            StaticField {
+                                inner: Field { doc, .. },
+                                default,
+                            },
+                        ) in type_data.static_fields.iter()
+                        {
                             if let Some(docs) = self.accumulate_docs(&[doc.as_deref()]) {
                                 writeln!(buffer, "\t{}", docs.join("\n\t"))?;
                             }
@@ -154,13 +171,8 @@ impl<'writer> DefinitionWriter<'writer> {
                             writeln!(
                                 buffer,
                                 "\t{},",
-                                self.function_signature(
-                                    name,
-                                    &func.params,
-                                    &func.returns,
-                                    true
-                                )?
-                                .join("\n\t")
+                                self.function_signature(name, &func.params, &func.returns, true)?
+                                    .join("\n\t")
                             )?;
                         }
 
@@ -184,7 +196,14 @@ impl<'writer> DefinitionWriter<'writer> {
 
                         if !type_data.is_meta_empty() {
                             writeln!(buffer, "\t__metatable = {{")?;
-                            for (name, StaticField { inner: Field { ty, doc }, default }) in type_data.static_meta_fields.iter() {
+                            for (
+                                name,
+                                StaticField {
+                                    inner: Field { ty, doc },
+                                    default,
+                                },
+                            ) in type_data.static_meta_fields.iter()
+                            {
                                 if let Some(docs) = self.accumulate_docs(&[doc.as_deref()]) {
                                     writeln!(buffer, "\t\t{}", docs.join("\n\t\t"))?;
                                 }
@@ -197,7 +216,11 @@ impl<'writer> DefinitionWriter<'writer> {
                                 if let Some(docs) = self.accumulate_docs(&[field.doc.as_deref()]) {
                                     writeln!(buffer, "\t\t{}", docs.join("\n\t\t"))?;
                                 }
-                                writeln!(buffer, "\t\t--- @type {}", self.type_signature(&field.ty)?)?;
+                                writeln!(
+                                    buffer,
+                                    "\t\t--- @type {}",
+                                    self.type_signature(&field.ty)?
+                                )?;
                                 writeln!(buffer, "\t\t{name} = nil,")?;
                             }
 
@@ -241,7 +264,9 @@ impl<'writer> DefinitionWriter<'writer> {
                     }
                 }
                 Type::Enum(types) => {
-                    self.name_map.borrow_mut().insert(definition.ty.clone(), definition.name.clone());
+                    self.name_map
+                        .borrow_mut()
+                        .insert(definition.ty.clone(), definition.name.clone());
 
                     if let Some(docs) = self.accumulate_docs(&[definition.doc.as_deref()]) {
                         writeln!(buffer, "{}", docs.join("\n"))?;
@@ -288,7 +313,7 @@ impl<'writer> DefinitionWriter<'writer> {
                     return Err(mlua::Error::runtime(format!(
                         "invalid root level type: {:?}",
                         other
-                    )))
+                    )));
                 }
             }
             writeln!(buffer)?;
@@ -311,9 +336,9 @@ impl<'writer> DefinitionWriter<'writer> {
             let doc = param.doc.as_deref().filter(|d| !d.is_empty());
             result.push(match (param.name.as_deref(), doc) {
                 (Some(name), Some(doc)) => format!("--- @param {name} {ty} {doc}"),
-                (Some(name), None)      => format!("--- @param {name} {ty}"),
-                (None, Some(doc))       => format!("--- @param param{} {ty} {doc}", i + 1),
-                (None, None)            => format!("--- @param param{} {ty}", i + 1),
+                (Some(name), None) => format!("--- @param {name} {ty}"),
+                (None, Some(doc)) => format!("--- @param param{} {ty} {doc}", i + 1),
+                (None, None) => format!("--- @param param{} {ty}", i + 1),
             });
         }
 
@@ -322,23 +347,23 @@ impl<'writer> DefinitionWriter<'writer> {
             let doc = ret.doc.as_deref().filter(|d| !d.is_empty());
             result.push(match doc {
                 Some(doc) => format!("--- @return {ty} #{}: {doc}", i + 1),
-                None      => format!("--- @return {ty}"),
+                None => format!("--- @return {ty}"),
             });
         }
 
         result.push(format!(
-                "{}function{}({}) end",
-                if assign {
-                    format!("{name} = ")
-                } else {
-                    String::new()
-                },
-                if !assign {
-                    format!(" {name}")
-                } else {
-                    String::new()
-                },
-                params
+            "{}function{}({}) end",
+            if assign {
+                format!("{name} = ")
+            } else {
+                String::new()
+            },
+            if !assign {
+                format!(" {name}")
+            } else {
+                String::new()
+            },
+            params
                 .iter()
                 .enumerate()
                 .map(|(i, v)| v
@@ -366,9 +391,9 @@ impl<'writer> DefinitionWriter<'writer> {
             let doc = param.doc.as_deref().filter(|d| !d.is_empty());
             result.push(match (param.name.as_deref(), doc) {
                 (Some(name), Some(doc)) => format!("--- @param {name} {ty} {doc}"),
-                (Some(name), None)      => format!("--- @param {name} {ty}"),
-                (None, Some(doc))       => format!("--- @param param{} {ty} {doc}", i + 1),
-                (None, None)            => format!("--- @param param{} {ty}", i + 1),
+                (Some(name), None) => format!("--- @param {name} {ty}"),
+                (None, Some(doc)) => format!("--- @param param{} {ty} {doc}", i + 1),
+                (None, None) => format!("--- @param param{} {ty}", i + 1),
             });
         }
 
@@ -377,24 +402,24 @@ impl<'writer> DefinitionWriter<'writer> {
             let doc = ret.doc.as_deref().filter(|d| !d.is_empty());
             result.push(match doc {
                 Some(doc) => format!("--- @return {ty} #{}: {doc}", i + 1),
-                None      => format!("--- @return {ty}"),
+                None => format!("--- @return {ty}"),
             });
         }
 
         result.push(format!(
-                "{}function{}({}{}) end",
-                if assign {
-                    format!("{name} = ")
-                } else {
-                    String::new()
-                },
-                if !assign {
-                    format!(" {name}")
-                } else {
-                    String::new()
-                },
-                if params.is_empty() { "self" } else { "self, " },
-                params
+            "{}function{}({}{}) end",
+            if assign {
+                format!("{name} = ")
+            } else {
+                String::new()
+            },
+            if !assign {
+                format!(" {name}")
+            } else {
+                String::new()
+            },
+            if params.is_empty() { "self" } else { "self, " },
+            params
                 .iter()
                 .enumerate()
                 .map(|(i, v)| v
@@ -412,21 +437,29 @@ impl<'writer> DefinitionWriter<'writer> {
         Ok(match ty {
             Type::Enum(_) => match self.name_map.borrow().get(ty) {
                 Some(name) => name.to_string(),
-                None => return Err(mlua::Error::runtime("missing enum type definition; make sure the type is registered before it is used"))
+                None => {
+                    return Err(mlua::Error::runtime(
+                        "missing enum type definition; make sure the type is registered before it is used",
+                    ));
+                }
             },
             Type::Class(_) => match self.name_map.borrow().get(ty) {
                 Some(name) => name.to_string(),
-                None => return Err(mlua::Error::runtime("missing class type definition; make sure the type is registered before it is used"))
+                None => {
+                    return Err(mlua::Error::runtime(
+                        "missing class type definition; make sure the type is registered before it is used",
+                    ));
+                }
             },
             Type::Single(value) => value.to_string(),
             Type::Tuple(types) => {
                 format!(
                     "[{}]",
                     types
-                    .iter()
-                    .map(|v| self.type_signature(v))
-                    .collect::<mlua::Result<Vec<_>>>()?
-                    .join(", ")
+                        .iter()
+                        .map(|v| self.type_signature(v))
+                        .collect::<mlua::Result<Vec<_>>>()?
+                        .join(", ")
                 )
             }
             Type::Array(ty) => {
@@ -443,26 +476,28 @@ impl<'writer> DefinitionWriter<'writer> {
                 format!(
                     "fun({}){}",
                     params
-                    .iter()
-                    .enumerate()
-                    .map(|(i, v)| {
-                        let name = v.name.as_ref()
-                            .map(|n| n.to_string())
-                            .unwrap_or(format!("param{}", i + 1));
-                        Ok(format!("{name}: {}", self.type_signature(&v.ty)?))
-                    })
-                    .collect::<mlua::Result<Vec<_>>>()?
-                    .join(", "),
+                        .iter()
+                        .enumerate()
+                        .map(|(i, v)| {
+                            let name = v
+                                .name
+                                .as_ref()
+                                .map(|n| n.to_string())
+                                .unwrap_or(format!("param{}", i + 1));
+                            Ok(format!("{name}: {}", self.type_signature(&v.ty)?))
+                        })
+                        .collect::<mlua::Result<Vec<_>>>()?
+                        .join(", "),
                     if returns.is_empty() {
                         String::new()
                     } else {
                         format!(
                             ": {}",
                             returns
-                            .iter()
-                            .map(|v| self.type_signature(&v.ty))
-                            .collect::<mlua::Result<Vec<_>>>()?
-                            .join(", ")
+                                .iter()
+                                .map(|v| self.type_signature(&v.ty))
+                                .collect::<mlua::Result<Vec<_>>>()?
+                                .join(", ")
                         )
                     }
                 )
@@ -476,17 +511,17 @@ impl<'writer> DefinitionWriter<'writer> {
                 format!(
                     "{{ {} }}",
                     entries
-                    .iter()
-                    .map(|(k, v)| { Ok(format!("{k}: {}", self.type_signature(v)?)) })
-                    .collect::<mlua::Result<Vec<_>>>()?
-                    .join(", ")
+                        .iter()
+                        .map(|(k, v)| { Ok(format!("{k}: {}", self.type_signature(v)?)) })
+                        .collect::<mlua::Result<Vec<_>>>()?
+                        .join(", ")
                 )
             }
             other => {
                 return Err(mlua::Error::runtime(format!(
-                            "type cannot be a type signature: {}",
-                            other.as_ref()
-                )))
+                    "type cannot be a type signature: {}",
+                    other.as_ref()
+                )));
             }
         })
     }

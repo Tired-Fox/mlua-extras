@@ -4,7 +4,7 @@ use mlua::{AnyUserData, FromLua, FromLuaMulti, IntoLua, IntoLuaMulti, Lua, Table
 
 mod module;
 
-pub use module::{LuaModule, Module, ModuleBuilder, ModuleFields, ModuleMethods, ExtendModule};
+pub use module::{ExtendModule, LuaModule, Module, ModuleBuilder, ModuleFields, ModuleMethods};
 
 use crate::MaybeSend;
 
@@ -46,7 +46,7 @@ pub trait LuaExtras {
     ///   - <https://www.lua.org/manual/5.4/manual.html#pdf-package.path>
     ///   - <https://www.lua.org/manual/5.4/manual.html#pdf-package.searchpath>
     fn prepend_paths<S: AsRef<Path>>(&self, paths: impl IntoIterator<Item = S>)
-        -> mlua::Result<()>;
+    -> mlua::Result<()>;
 
     /// Append a path tothe `package.path` value
     ///
@@ -114,7 +114,7 @@ pub trait LuaExtras {
     ///   - <https://www.lua.org/manual/5.4/manual.html#pdf-package.cpath>
     ///   - <https://www.lua.org/manual/5.4/manual.html#pdf-package.searchpath>
     fn append_cpaths<S: AsRef<Path>>(&self, paths: impl IntoIterator<Item = S>)
-        -> mlua::Result<()>;
+    -> mlua::Result<()>;
 
     /// Set the `package.cpath` value
     ///

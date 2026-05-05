@@ -1,6 +1,6 @@
 use std::{cell::RefCell, collections::HashMap, path::Path, slice::Iter};
 
-use crate::typed::{function::Return, Param, Type};
+use crate::typed::{Param, Type, function::Return};
 
 use super::{Definition, Definitions};
 
@@ -130,22 +130,16 @@ impl<'writer> LuauDefinitionWriter<'writer> {
 
                     // Instance fields
                     for (name, field) in type_data.fields.iter() {
-                        if name.is_int() { continue; }
-                        self.write_doc_comments(
-                            &mut buffer,
-                            &[field.doc.as_deref()],
-                            "\t",
-                        )?;
+                        if name.is_int() {
+                            continue;
+                        }
+                        self.write_doc_comments(&mut buffer, &[field.doc.as_deref()], "\t")?;
                         writeln!(buffer, "\t{}: {}", name, self.type_signature(&field.ty)?)?;
                     }
 
                     // Methods (with self)
                     for (name, func) in type_data.methods.iter() {
-                        self.write_doc_comments(
-                            &mut buffer,
-                            &[func.doc.as_deref()],
-                            "\t",
-                        )?;
+                        self.write_doc_comments(&mut buffer, &[func.doc.as_deref()], "\t")?;
                         writeln!(
                             buffer,
                             "\tfunction {}(self{}{}): {}",
@@ -158,31 +152,15 @@ impl<'writer> LuauDefinitionWriter<'writer> {
 
                     // Meta fields
                     for (name, field) in type_data.meta_fields.iter() {
-                        self.write_doc_comments(
-                            &mut buffer,
-                            &[field.doc.as_deref()],
-                            "\t",
-                        )?;
+                        self.write_doc_comments(&mut buffer, &[field.doc.as_deref()], "\t")?;
                         writeln!(buffer, "\t{}: {}", name, self.type_signature(&field.ty)?)?;
                     }
 
                     // Meta methods (with self)
                     for (name, func) in type_data.meta_methods.iter() {
-                        self.write_doc_comments(
-                            &mut buffer,
-                            &[func.doc.as_deref()],
-                            "\t",
-                        )?;
-                        self.write_param_doc_comments(
-                            &mut buffer,
-                            &func.params,
-                            "\t"
-                        )?;
-                        self.write_return_doc_comments(
-                            &mut buffer,
-                            &func.returns,
-                            "\t"
-                        )?;
+                        self.write_doc_comments(&mut buffer, &[func.doc.as_deref()], "\t")?;
+                        self.write_param_doc_comments(&mut buffer, &func.params, "\t")?;
+                        self.write_return_doc_comments(&mut buffer, &func.returns, "\t")?;
                         writeln!(
                             buffer,
                             "\tfunction {}(self{}{}): {}",
@@ -201,7 +179,9 @@ impl<'writer> LuauDefinitionWriter<'writer> {
                     //
                     // They are first declared themselves to give them richer type information.
                     // Then they are added to a global table declaration with `typeof()`.
-                    let static_fns: Vec<_> = type_data.functions.iter()
+                    let static_fns: Vec<_> = type_data
+                        .functions
+                        .iter()
                         .chain(type_data.meta_functions.iter())
                         .collect();
 
@@ -210,21 +190,9 @@ impl<'writer> LuauDefinitionWriter<'writer> {
                     }
 
                     for (name, func) in static_fns.iter() {
-                        self.write_doc_comments(
-                            &mut buffer,
-                            &[func.doc.as_deref()],
-                            "",
-                        )?;
-                        self.write_param_doc_comments(
-                            &mut buffer,
-                            &func.params,
-                            ""
-                        )?;
-                        self.write_return_doc_comments(
-                            &mut buffer,
-                            &func.returns,
-                            ""
-                        )?;
+                        self.write_doc_comments(&mut buffer, &[func.doc.as_deref()], "")?;
+                        self.write_param_doc_comments(&mut buffer, &func.params, "")?;
+                        self.write_return_doc_comments(&mut buffer, &func.returns, "")?;
                         writeln!(
                             buffer,
                             "declare function {}_{name}({}): {}",
@@ -244,15 +212,16 @@ impl<'writer> LuauDefinitionWriter<'writer> {
                                 &[field.inner.doc.as_deref()],
                                 "\t",
                             )?;
-                            writeln!(buffer, "\t{}: {},", name, self.type_signature(&field.inner.ty)?)?;
+                            writeln!(
+                                buffer,
+                                "\t{}: {},",
+                                name,
+                                self.type_signature(&field.inner.ty)?
+                            )?;
                         }
 
                         for (name, _func) in &static_fns {
-                            writeln!(
-                                buffer,
-                                "\t{name}: typeof({}_{name}),",
-                                definition.name,
-                            )?;
+                            writeln!(buffer, "\t{name}: typeof({}_{name}),", definition.name,)?;
                         }
                         writeln!(buffer, "}}")?;
                     }
@@ -262,11 +231,7 @@ impl<'writer> LuauDefinitionWriter<'writer> {
                         .borrow_mut()
                         .insert(definition.ty.clone(), definition.name.clone());
 
-                    self.write_doc_comments(
-                        &mut buffer,
-                        &[definition.doc.as_deref()],
-                        "",
-                    )?;
+                    self.write_doc_comments(&mut buffer, &[definition.doc.as_deref()], "")?;
                     let type_strs = types
                         .iter()
                         .map(|v| self.type_signature(v))
@@ -279,11 +244,7 @@ impl<'writer> LuauDefinitionWriter<'writer> {
                     )?;
                 }
                 Type::Alias(ty) => {
-                    self.write_doc_comments(
-                        &mut buffer,
-                        &[definition.doc.as_deref()],
-                        "",
-                    )?;
+                    self.write_doc_comments(&mut buffer, &[definition.doc.as_deref()], "")?;
                     writeln!(
                         buffer,
                         "export type {} = {}",
@@ -292,21 +253,9 @@ impl<'writer> LuauDefinitionWriter<'writer> {
                     )?;
                 }
                 Type::Function { params, returns } => {
-                    self.write_doc_comments(
-                        &mut buffer,
-                        &[definition.doc.as_deref()],
-                        "",
-                    )?;
-                    self.write_param_doc_comments(
-                        &mut buffer,
-                        &params,
-                        ""
-                    )?;
-                    self.write_return_doc_comments(
-                        &mut buffer,
-                        &returns,
-                        ""
-                    )?;
+                    self.write_doc_comments(&mut buffer, &[definition.doc.as_deref()], "")?;
+                    self.write_param_doc_comments(&mut buffer, &params, "")?;
+                    self.write_return_doc_comments(&mut buffer, &returns, "")?;
                     writeln!(
                         buffer,
                         "declare function {}({}): {}",
@@ -319,7 +268,7 @@ impl<'writer> LuauDefinitionWriter<'writer> {
                     return Err(mlua::Error::runtime(format!(
                         "invalid root level type: {:?}",
                         other
-                    )))
+                    )));
                 }
             }
         }
@@ -334,7 +283,7 @@ impl<'writer> LuauDefinitionWriter<'writer> {
                 None => {
                     return Err(mlua::Error::runtime(
                         "missing enum type definition; make sure the type is registered before it is used",
-                    ))
+                    ));
                 }
             },
             Type::Class(_) => match self.name_map.borrow().get(ty) {
@@ -342,7 +291,7 @@ impl<'writer> LuauDefinitionWriter<'writer> {
                 None => {
                     return Err(mlua::Error::runtime(
                         "missing class type definition; make sure the type is registered before it is used",
-                    ))
+                    ));
                 }
             },
             Type::Single(value) => {
@@ -402,7 +351,9 @@ impl<'writer> LuauDefinitionWriter<'writer> {
             Type::Union(types) => {
                 // Check for T | nil pattern and emit T? shorthand
                 if types.len() == 2 {
-                    let nil_pos = types.iter().position(|t| matches!(t, Type::Single(s) if s == "nil"));
+                    let nil_pos = types
+                        .iter()
+                        .position(|t| matches!(t, Type::Single(s) if s == "nil"));
                     if let Some(pos) = nil_pos {
                         let other = &types[1 - pos];
                         let sig = self.type_signature(other)?;
@@ -431,7 +382,7 @@ impl<'writer> LuauDefinitionWriter<'writer> {
                 return Err(mlua::Error::runtime(format!(
                     "type cannot be a type signature: {}",
                     other.as_ref()
-                )))
+                )));
             }
         })
     }
@@ -488,8 +439,13 @@ impl<'writer> LuauDefinitionWriter<'writer> {
         indent: &str,
     ) -> mlua::Result<()> {
         for (i, p) in params.iter().enumerate().filter(|(_, p)| p.doc.is_some()) {
-            write!(buffer, "{indent}-- @param {} {}",
-                p.name.as_deref().map(|v| v.to_string()).unwrap_or_else(|| format!("param{}", i + 1)),
+            write!(
+                buffer,
+                "{indent}-- @param {} {}",
+                p.name
+                    .as_deref()
+                    .map(|v| v.to_string())
+                    .unwrap_or_else(|| format!("param{}", i + 1)),
                 self.type_signature(&p.ty)?
             )?;
             if let Some(doc) = p.doc.as_deref() {

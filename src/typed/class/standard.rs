@@ -3,7 +3,9 @@ use std::{borrow::Cow, collections::BTreeMap};
 use mlua::{AnyUserData, FromLua, FromLuaMulti, IntoLua, IntoLuaMulti, Lua};
 
 use crate::{
-    MaybeSend, ser::to_lua_repr, typed::{Field, Func, Index, IntoDocComment, StaticField, Type}
+    MaybeSend,
+    ser::to_lua_repr,
+    typed::{Field, Func, Index, IntoDocComment, StaticField, Type},
 };
 
 use super::{
@@ -115,27 +117,38 @@ impl TypedClassBuilder {
     ///     .field("message", Type::string(), format!("A message for {NAME}"));
     /// ```
     pub fn field(mut self, key: impl Into<Index>, ty: Type, doc: impl IntoDocComment) -> Self {
-        self.typed_class.fields.insert(key.into(), Field::new(ty, doc));
+        self.typed_class
+            .fields
+            .insert(key.into(), Field::new(ty, doc));
         self
     }
 
-    pub fn static_field<V>(mut self, key: impl Into<Index>, value: V, doc: impl IntoDocComment) -> Self 
+    pub fn static_field<V>(
+        mut self,
+        key: impl Into<Index>,
+        value: V,
+        doc: impl IntoDocComment,
+    ) -> Self
     where
-        V: Typed + IntoLua
+        V: Typed + IntoLua,
     {
         let value = match value.into_lua(&self.lua) {
             Ok(value) => to_lua_repr(&value).map_err(mlua::Error::runtime),
-            Err(err) => Err(err)
+            Err(err) => Err(err),
         };
 
         if let Ok(value) = value {
-            self.typed_class.static_fields.insert(key.into(), StaticField::new(V::ty(), doc, value));
+            self.typed_class
+                .static_fields
+                .insert(key.into(), StaticField::new(V::ty(), doc, value));
         }
         self
     }
 
     pub fn inherit(mut self, parent: &TypedClass) -> Self {
-        self.typed_class.static_fields.extend(parent.static_fields.clone());
+        self.typed_class
+            .static_fields
+            .extend(parent.static_fields.clone());
         self
     }
 
@@ -221,7 +234,9 @@ impl TypedClassBuilder {
     ///     .meta_field("message", Type::string(), format!("A message for {NAME}"));
     /// ```
     pub fn meta_field(mut self, key: impl Into<Index>, ty: Type, doc: impl IntoDocComment) -> Self {
-        self.typed_class.meta_fields.insert(key.into(), Field::new(ty, doc));
+        self.typed_class
+            .meta_fields
+            .insert(key.into(), Field::new(ty, doc));
         self
     }
 
@@ -329,7 +344,7 @@ impl<T: TypedUserData> TypedDataFields<T> for TypedClassBuilder {
     {
         let value = match value.into_lua(&self.lua) {
             Ok(value) => to_lua_repr(&value).map_err(mlua::Error::runtime),
-            Err(err) => Err(err)
+            Err(err) => Err(err),
         };
 
         if let Ok(value) = value {
@@ -337,15 +352,10 @@ impl<T: TypedUserData> TypedDataFields<T> for TypedClassBuilder {
             let ty = self.queued_ty.take().unwrap_or(V::as_param());
             let value: Cow<'static, str> = value.into();
 
-            self.typed_class.static_fields
-                .insert(
-                    name.into(),
-                    StaticField::new(
-                        ty,
-                        self.queued_doc.take(),
-                        value,
-                    )
-                );
+            self.typed_class.static_fields.insert(
+                name.into(),
+                StaticField::new(ty, self.queued_doc.take(), value),
+            );
         }
     }
 
@@ -357,7 +367,8 @@ impl<T: TypedUserData> TypedDataFields<T> for TypedClassBuilder {
     {
         let name: Cow<'static, str> = name.into().into();
         let ty = self.queued_ty.take().unwrap_or(A::as_param());
-        self.typed_class.fields
+        self.typed_class
+            .fields
             .entry(name.into())
             .and_modify({
                 let ty = ty.clone();
@@ -365,7 +376,7 @@ impl<T: TypedUserData> TypedDataFields<T> for TypedClassBuilder {
                     if let Some(doc) = self.queued_doc.take() {
                         v.doc = Some(match v.doc.take() {
                             Some(d) => format!("{d}\n{doc}").into(),
-                            None => doc
+                            None => doc,
                         });
                     }
                     v.ty = v.ty.clone() | ty;
@@ -385,7 +396,8 @@ impl<T: TypedUserData> TypedDataFields<T> for TypedClassBuilder {
     {
         let name: Cow<'static, str> = name.into().into();
         let ty = self.queued_ty.take().unwrap_or(R::as_return());
-        self.typed_class.fields
+        self.typed_class
+            .fields
             .entry(name.into())
             .and_modify({
                 let ty = ty.clone();
@@ -393,7 +405,7 @@ impl<T: TypedUserData> TypedDataFields<T> for TypedClassBuilder {
                     if let Some(doc) = self.queued_doc.take() {
                         v.doc = Some(match v.doc.take() {
                             Some(d) => format!("{d}\n{doc}").into(),
-                            None => doc
+                            None => doc,
                         });
                     }
                     v.ty = v.ty.clone() | ty;
@@ -414,8 +426,12 @@ impl<T: TypedUserData> TypedDataFields<T> for TypedClassBuilder {
         SET: 'static + MaybeSend + Fn(&Lua, AnyUserData, A) -> mlua::Result<()>,
     {
         let name: Cow<'static, str> = name.into().into();
-        let ty = self.queued_ty.take().unwrap_or(A::as_param() | R::as_return());
-        self.typed_class.fields
+        let ty = self
+            .queued_ty
+            .take()
+            .unwrap_or(A::as_param() | R::as_return());
+        self.typed_class
+            .fields
             .entry(name.into())
             .and_modify({
                 let ty = ty.clone();
@@ -423,7 +439,7 @@ impl<T: TypedUserData> TypedDataFields<T> for TypedClassBuilder {
                     if let Some(doc) = self.queued_doc.take() {
                         v.doc = Some(match v.doc.take() {
                             Some(d) => format!("{d}\n{doc}").into(),
-                            None => doc
+                            None => doc,
                         });
                     }
                     v.ty = v.ty.clone() | ty;
@@ -443,7 +459,8 @@ impl<T: TypedUserData> TypedDataFields<T> for TypedClassBuilder {
     {
         let name: Cow<'static, str> = name.into().into();
         let ty = self.queued_ty.take().unwrap_or(A::as_param());
-        self.typed_class.fields
+        self.typed_class
+            .fields
             .entry(name.into())
             .and_modify({
                 let ty = ty.clone();
@@ -451,7 +468,7 @@ impl<T: TypedUserData> TypedDataFields<T> for TypedClassBuilder {
                     if let Some(doc) = self.queued_doc.take() {
                         v.doc = Some(match v.doc.take() {
                             Some(d) => format!("{d}\n{doc}").into(),
-                            None => doc
+                            None => doc,
                         });
                     }
                     v.ty = v.ty.clone() | ty;
@@ -471,7 +488,8 @@ impl<T: TypedUserData> TypedDataFields<T> for TypedClassBuilder {
     {
         let name: Cow<'static, str> = name.into().into();
         let ty = self.queued_ty.take().unwrap_or(R::as_return());
-        self.typed_class.fields
+        self.typed_class
+            .fields
             .entry(name.into())
             .and_modify({
                 let ty = ty.clone();
@@ -479,7 +497,7 @@ impl<T: TypedUserData> TypedDataFields<T> for TypedClassBuilder {
                     if let Some(doc) = self.queued_doc.take() {
                         v.doc = Some(match v.doc.take() {
                             Some(d) => format!("{d}\n{doc}").into(),
-                            None => doc
+                            None => doc,
                         });
                     }
                     v.ty = v.ty.clone() | ty;
@@ -500,8 +518,12 @@ impl<T: TypedUserData> TypedDataFields<T> for TypedClassBuilder {
         SET: 'static + MaybeSend + Fn(&Lua, &mut T, A) -> mlua::Result<()>,
     {
         let name: Cow<'static, str> = name.into().into();
-        let ty = self.queued_ty.take().unwrap_or(A::as_param() | R::as_return());
-        self.typed_class.fields
+        let ty = self
+            .queued_ty
+            .take()
+            .unwrap_or(A::as_param() | R::as_return());
+        self.typed_class
+            .fields
             .entry(name.into())
             .and_modify({
                 let ty = ty.clone();
@@ -509,7 +531,7 @@ impl<T: TypedUserData> TypedDataFields<T> for TypedClassBuilder {
                     if let Some(doc) = self.queued_doc.take() {
                         v.doc = Some(match v.doc.take() {
                             Some(d) => format!("{d}\n{doc}").into(),
-                            None => doc
+                            None => doc,
                         });
                     }
                     v.ty = v.ty.clone() | ty;
@@ -527,7 +549,7 @@ impl<T: TypedUserData> TypedDataFields<T> for TypedClassBuilder {
     {
         let value = match value.into_lua(&self.lua) {
             Ok(value) => to_lua_repr(&value).map_err(mlua::Error::runtime),
-            Err(err) => Err(err)
+            Err(err) => Err(err),
         };
 
         if let Ok(value) = value {
@@ -535,26 +557,22 @@ impl<T: TypedUserData> TypedDataFields<T> for TypedClassBuilder {
             let ty = self.queued_ty.take().unwrap_or(V::as_param());
             let value: Cow<'static, str> = value.into();
 
-            self.typed_class.static_meta_fields
-                .insert(
-                    name.into(),
-                    StaticField::new(
-                        ty,
-                        self.queued_doc.take(),
-                        value,
-                    )
-                );
+            self.typed_class.static_meta_fields.insert(
+                name.into(),
+                StaticField::new(ty, self.queued_doc.take(), value),
+            );
         }
     }
 
     fn add_meta_field_with<R, F>(&mut self, meta: impl Into<String>, _: F)
-        where
-            F: 'static + MaybeSend + Fn(&Lua) -> mlua::Result<R>,
-            R: IntoLua + Typed {
-
+    where
+        F: 'static + MaybeSend + Fn(&Lua) -> mlua::Result<R>,
+        R: IntoLua + Typed,
+    {
         let name: Cow<'static, str> = meta.into().into();
         let ty = self.queued_ty.take().unwrap_or(R::as_return());
-        self.typed_class.meta_fields
+        self.typed_class
+            .meta_fields
             .entry(name.into())
             .and_modify({
                 let ty = ty.clone();
@@ -562,7 +580,7 @@ impl<T: TypedUserData> TypedDataFields<T> for TypedClassBuilder {
                     if let Some(doc) = self.queued_doc.take() {
                         v.doc = Some(match v.doc.take() {
                             Some(d) => format!("{d}\n{doc}").into(),
-                            None => doc
+                            None => doc,
                         });
                     }
                     v.ty = v.ty.clone() | ty;
@@ -582,12 +600,19 @@ impl<T: TypedUserData> TypedDataMethods<T> for TypedClassBuilder {
     }
 
     fn param(&mut self, name: impl std::fmt::Display, doc: impl IntoDocComment) -> &mut Self {
-        self.queued_params.push((None, name.to_string(), doc.into_doc_comment()));
+        self.queued_params
+            .push((None, name.to_string(), doc.into_doc_comment()));
         self
     }
 
-    fn param_as(&mut self, ty: impl Into<Type>, name: impl std::fmt::Display, doc: impl IntoDocComment) -> &mut Self {
-        self.queued_params.push((Some(ty.into()), name.to_string(), doc.into_doc_comment()));
+    fn param_as(
+        &mut self,
+        ty: impl Into<Type>,
+        name: impl std::fmt::Display,
+        doc: impl IntoDocComment,
+    ) -> &mut Self {
+        self.queued_params
+            .push((Some(ty.into()), name.to_string(), doc.into_doc_comment()));
         self
     }
 
@@ -598,19 +623,31 @@ impl<T: TypedUserData> TypedDataMethods<T> for TypedClassBuilder {
         self
     }
 
-    
     fn ret_as(&mut self, ty: impl Into<Type>, doc: impl IntoDocComment) -> &mut Self {
-        self.queued_returns.push((Some(ty.into()), doc.into_doc_comment()));
+        self.queued_returns
+            .push((Some(ty.into()), doc.into_doc_comment()));
         self
     }
 
     fn index<I: Typed>(&mut self, idx: isize, doc: impl IntoDocComment) -> &mut Self {
-        self.typed_class.fields.insert(idx.into(), Field { ty: I::as_param(), doc: doc.into_doc_comment() });
+        self.typed_class.fields.insert(
+            idx.into(),
+            Field {
+                ty: I::as_param(),
+                doc: doc.into_doc_comment(),
+            },
+        );
         self
     }
 
     fn index_as(&mut self, idx: isize, ty: impl Into<Type>, doc: impl IntoDocComment) -> &mut Self {
-        self.typed_class.fields.insert(idx.into(), Field { ty: ty.into(), doc: doc.into_doc_comment() });
+        self.typed_class.fields.insert(
+            idx.into(),
+            Field {
+                ty: ty.into(),
+                doc: doc.into_doc_comment(),
+            },
+        );
         self
     }
 

@@ -78,7 +78,7 @@ impl<'a, 'b> Serializer for &'a mut LuaSerializer<'b> {
         if v.is_nan() {
             self.out.push_str("0/0");
         } else if v.is_infinite() {
-            if  v.is_sign_positive() {
+            if v.is_sign_positive() {
                 self.out.push_str("math.huge");
             } else {
                 self.out.push_str("-math.huge");
@@ -106,7 +106,7 @@ impl<'a, 'b> Serializer for &'a mut LuaSerializer<'b> {
             if v.is_nan() {
                 self.out.push_str("0/0");
             } else if v.is_infinite() {
-                if  v.is_sign_positive() {
+                if v.is_sign_positive() {
                     self.out.push_str("math.huge");
                 } else {
                     self.out.push_str("-math.huge");

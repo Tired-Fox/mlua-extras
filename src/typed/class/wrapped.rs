@@ -1,10 +1,10 @@
+use crate::{MaybeSend, typed::IntoDocComment};
 use mlua::{
-    AnyUserData, FromLua, FromLuaMulti, IntoLua, IntoLuaMulti, Lua, UserData,
-    UserDataFields, UserDataMethods,
+    AnyUserData, FromLua, FromLuaMulti, IntoLua, IntoLuaMulti, Lua, UserData, UserDataFields,
+    UserDataMethods,
 };
 #[cfg(feature = "async")]
 use mlua::{UserDataRef, UserDataRefMut};
-use crate::{MaybeSend, typed::IntoDocComment};
 
 use super::{Type, Typed, TypedDataFields, TypedDataMethods, TypedMultiValue};
 
@@ -104,9 +104,10 @@ impl<'ctx, T: UserData, U: UserDataFields<T>> TypedDataFields<T> for WrappedBuil
     }
 
     fn add_meta_field_with<R, F>(&mut self, name: impl Into<String>, f: F)
-        where
-            F: 'static + MaybeSend + Fn(&Lua) -> mlua::Result<R>,
-            R: IntoLua + 'static {
+    where
+        F: 'static + MaybeSend + Fn(&Lua) -> mlua::Result<R>,
+        R: IntoLua + 'static,
+    {
         self.0.add_meta_field_with(name, f);
     }
 }
@@ -116,14 +117,10 @@ impl<'ctx, T: UserData, U: UserDataMethods<T>> TypedDataMethods<T> for WrappedBu
         self
     }
 
-    fn param(
-        &mut self,
-        _name: impl std::fmt::Display,
-        _doc: impl IntoDocComment,
-    ) -> &mut Self {
+    fn param(&mut self, _name: impl std::fmt::Display, _doc: impl IntoDocComment) -> &mut Self {
         self
     }
-    
+
     fn param_as(
         &mut self,
         _ty: impl Into<Type>,
@@ -133,11 +130,10 @@ impl<'ctx, T: UserData, U: UserDataMethods<T>> TypedDataMethods<T> for WrappedBu
         self
     }
 
-
     fn ret(&mut self, _: impl IntoDocComment) -> &mut Self {
         self
     }
-    
+
     fn ret_as(&mut self, _: impl Into<Type>, _: impl IntoDocComment) -> &mut Self {
         self
     }
@@ -146,7 +142,12 @@ impl<'ctx, T: UserData, U: UserDataMethods<T>> TypedDataMethods<T> for WrappedBu
         self
     }
 
-    fn index_as(&mut self, _idx: isize, _ty: impl Into<Type>, _doc: impl IntoDocComment) -> &mut Self {
+    fn index_as(
+        &mut self,
+        _idx: isize,
+        _ty: impl Into<Type>,
+        _doc: impl IntoDocComment,
+    ) -> &mut Self {
         self
     }
 
@@ -252,7 +253,7 @@ impl<'ctx, T: UserData, U: UserDataMethods<T>> TypedDataMethods<T> for WrappedBu
     {
         self.0.add_meta_method_mut(meta, method)
     }
-    
+
     fn add_meta_function_mut<A, R, F>(&mut self, meta: impl Into<String>, function: F)
     where
         A: FromLuaMulti + TypedMultiValue,
@@ -278,17 +279,16 @@ mod tests {
 
     impl TypedUserData for Counter {
         fn add_methods<T: TypedDataMethods<Self>>(methods: &mut T) {
-            methods.add_async_method("get_value", |_lua, this, _: ()| async move {
-                Ok(this.value)
-            });
+            methods.add_async_method(
+                "get_value",
+                |_lua, this, _: ()| async move { Ok(this.value) },
+            );
         }
     }
 
     #[test]
     fn test_add_async_method_compiles() {
         let lua = Lua::new();
-        lua.globals()
-            .set("counter", Counter { value: 42 })
-            .unwrap();
+        lua.globals().set("counter", Counter { value: 42 }).unwrap();
     }
 }

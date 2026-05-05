@@ -1,15 +1,17 @@
 pub mod ser;
 
-#[cfg(feature="mlua")]
-pub mod typed;
-#[cfg(feature="mlua")]
+#[cfg(feature = "mlua")]
 pub mod extras;
+#[cfg(feature = "mlua")]
+pub mod typed;
 
-#[cfg(feature="mlua")]
+#[cfg(feature = "mlua")]
 pub use mlua;
 
-#[cfg(feature="macros")]
-pub use mlua_extras_derive::{UserData, user_data_impl, Typed, TypedUserData, typed_user_data_impl};
+#[cfg(feature = "macros")]
+pub use mlua_extras_derive::{
+    Typed, TypedUserData, UserData, typed_user_data_impl, user_data_impl,
+};
 
 #[cfg(feature = "send")]
 /// Used by the `send` feature

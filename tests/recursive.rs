@@ -64,29 +64,32 @@ impl TypedUserData for TestOption {
                 })
             },
         );
-        
-        #[cfg(feature="userdata-wrappers")]
+
+        #[cfg(feature = "userdata-wrappers")]
         methods.add_function(
             "func_returns_arc_self",
             |_, ()| -> mlua::Result<std::sync::Arc<Self>> { Ok(Default::default()) },
         );
-        #[cfg(feature="userdata-wrappers")]
+        #[cfg(feature = "userdata-wrappers")]
         methods.add_function(
             "func_returns_arc_mutex_self",
-            |_, ()| -> mlua::Result<std::sync::Arc<std::sync::Mutex<Self>>> { Ok(Default::default()) },
+            |_, ()| -> mlua::Result<std::sync::Arc<std::sync::Mutex<Self>>> {
+                Ok(Default::default())
+            },
         );
 
-        #[cfg(feature="userdata-wrappers")]
+        #[cfg(feature = "userdata-wrappers")]
         methods.add_function(
             "func_returns_rc_refcell_self",
             |_, ()| -> mlua::Result<std::rc::Rc<Self>> { Ok(Default::default()) },
         );
-        #[cfg(feature="userdata-wrappers")]
+        #[cfg(feature = "userdata-wrappers")]
         methods.add_function(
             "func_returns_rc_refcell_self",
-            |_, ()| -> mlua::Result<std::rc::Rc<std::cell::RefCell<Self>>> { Ok(Default::default()) },
+            |_, ()| -> mlua::Result<std::rc::Rc<std::cell::RefCell<Self>>> {
+                Ok(Default::default())
+            },
         );
-
 
         methods.add_method("clone", |_, this, ()| Ok(this.clone()));
         methods.add_method(
