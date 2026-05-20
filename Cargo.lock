@@ -363,7 +363,7 @@ dependencies = [
 
 [[package]]
 name = "mlua-extras"
-version = "11.6.1"
+version = "11.6.2"
 dependencies = [
  "mlua",
  "mlua-extras-derive",
@@ -376,7 +376,7 @@ dependencies = [
 
 [[package]]
 name = "mlua-extras-derive"
-version = "11.6.0"
+version = "11.6.1"
 dependencies = [
  "darling",
  "deluxe",
