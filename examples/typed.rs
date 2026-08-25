@@ -1,15 +1,12 @@
 use std::path::PathBuf;
 
 use mlua_extras::{
-    Typed, UserData,
-    extras::LuaExtras,
-    mlua::{self, FromLua, Lua, LuaSerdeExt, MetaMethod, Value, Variadic},
-    typed::{
+    Typed, TypedUserData, extras::LuaExtras, mlua::{self, FromLua, Lua, LuaSerdeExt, MetaMethod, UserData, Value, Variadic}, typed::{
         Type, TypedDataFields, TypedDataMethods, TypedUserData,
         generator::{
             Definition, DefinitionFileGenerator, Definitions, LuauDefinitionFileGenerator,
         },
-    },
+    }, typeduserdata_impl,
 };
 use serde::Deserialize;
 
@@ -82,9 +79,27 @@ impl FromLua for Color {
     }
 }
 
-#[derive(Debug, Clone, Copy, UserData, Typed, Deserialize)]
+/// This is a doc comment section for the overall type
+#[derive(Debug, Clone, Copy, TypedUserData, Deserialize)]
 struct Example {
+    /// Example complex type
     color: Color,
+}
+
+#[typeduserdata_impl]
+impl Example {
+    /// print all items
+    #[lua(name = "printAll", infallible)]
+    fn print_all(all: Variadic<String>) {}
+
+    /// Log a specific format with any lua types
+    #[lua(name = "logAny", infallible)]
+    fn log_any(format: String, inject: Variadic<String>) {}
+
+    #[lua(meta, infallible)]
+    fn __tostring(&self) -> String {
+        format!("{self:?}")
+    }
 }
 
 impl Default for Example {
@@ -101,48 +116,6 @@ impl FromLua for Example {
             Value::UserData(data) => data.borrow::<Self>().map(|v| *v),
             other => lua.from_value(other),
         }
-    }
-}
-
-impl TypedUserData for Example {
-    fn add_documentation<F: mlua_extras::typed::TypedDataDocumentation<Self>>(docs: &mut F) {
-        docs.add("This is a doc comment section for the overall type");
-    }
-
-    fn add_fields<F: TypedDataFields<Self>>(fields: &mut F) {
-        fields
-            .document("Example complex type")
-            .add_field_method_get_set(
-                "color",
-                |_lua, this| Ok(this.color),
-                |_lua, this, clr: Color| {
-                    this.color = clr;
-                    Ok(())
-                },
-            );
-    }
-
-    fn add_methods<T: TypedDataMethods<Self>>(methods: &mut T) {
-        methods
-            .document("print all items")
-            .param("...", "")
-            .add_function("printAll", |_lua, all: Variadic<String>| {
-                println!(
-                    "{}",
-                    all.iter().map(|v| v.as_str()).collect::<Vec<_>>().join(" ")
-                );
-                Ok(())
-            });
-
-        methods
-            .document("Log a specific format with any lua types")
-            .param("format", "String to pass to the formatter.")
-            .param("...", "Arguments to pass to the formatter.")
-            .add_function("LogAny", |_, _args: (String, Variadic<Value>)| Ok(()));
-
-        methods.add_meta_method(MetaMethod::ToString, |_lua, this, ()| {
-            Ok(format!("{this:?}"))
-        });
     }
 }
 
@@ -172,7 +145,7 @@ fn main() -> mlua::Result<()> {
                 .register::<SystemColor>("System")
                 .register::<Color>("Color")
                 .register::<Example>("Example")
-                .value::<Example>("example")
+                .proxy::<Example>("example")
                 .document("Greet someone")
                 .param("name", "Name of the person to greet")
                 .function::<String, ()>("greet", ())

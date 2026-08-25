@@ -1,73 +1,22 @@
 --- @meta
 
---- @alias SystemColorEnum "Black"
----| "Red"
----| "Green"
----| "Yellow"
----| "Blue"
----| "Cyan"
----| "Magenta"
----| "White"
+--- @alias System "Black" | "Red" | "Green" | "Yellow" | "Blue" | "Cyan" | "Magenta" | "White"
 
---- @class _SystemColor
+--- @alias Color "System" | "Xterm" | "Rgb"
 
---- @class SystemColorBlack: _SystemColor
-
---- @class SystemColorRed: _SystemColor
-
---- @class SystemColorGreen: _SystemColor
-
---- @class SystemColorYellow: _SystemColor
-
---- @class SystemColorBlue: _SystemColor
-
---- @class SystemColorCyan: _SystemColor
-
---- @class SystemColorMagenta: _SystemColor
-
---- @class SystemColorWhite: _SystemColor
-
---- @alias System SystemColorBlack | SystemColorRed | SystemColorGreen | SystemColorYellow | SystemColorBlue | SystemColorCyan | SystemColorMagenta | SystemColorWhite
-
---- @alias ColorEnum "System"
----| "Xterm"
----| "Rgb"
-
---- Representation of a color
---- @class _Color
-local _CLASS__Color_ = {
-  __metatable = {
-    --- @param self _Color
-    --- @return string
-    __tostring = function(self) end,
-  }
-}
-
---- @class ColorSystem: _Color
-
---- @class ColorXterm: _Color
-
---- @class ColorRgb: _Color
-
---- @alias Color ColorSystem | ColorXterm | ColorRgb
-
---- This is a doc comment section for the overall type
 --- @class Example
---- Example complex type
 --- @field color Color
 local _CLASS_Example_ = {
-  --- Log a specific format with any lua types
-  --- @param format string String to pass to the formatter.
-  --- @param ... any Arguments to pass to the formatter.
-  LogAny = function(format, ...) end,
-  --- print all items
-  --- @param ... any
-  printAll = function(...) end,
-  __metatable = {
-    --- @param self Example
-    --- @return string
-    __tostring = function(self) end,
-  }
+	--- @param param1 string
+	--- @param ... any
+	logAny = function(param1, ...) end,
+	--- @param param1 any
+	printAll = function(param1) end,
+	__metatable = {
+		--- @param self Example
+		--- @return string
+		__tostring = function(self) end,
+	}
 }
 
 --- @type Example

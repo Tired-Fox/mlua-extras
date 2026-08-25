@@ -286,6 +286,7 @@ pub fn derive(input: &mut ItemImpl) -> TokenStream {
     static COUNTER: AtomicUsize = AtomicUsize::new(0);
     let unique_suffix = COUNTER.fetch_add(1, Ordering::Relaxed);
     let register_fn_name = format_ident!("__mlua_register_{type_name}_{unique_suffix}");
+    let register_fn_name_unwrapped = format_ident!("__mlua_register_{type_name}_unwrapped_{unique_suffix}");
     let register_fn_name_wrapped = format_ident!("__mlua_register_{type_name}_wrapped_{unique_suffix}");
     let registration_type_name = format_ident!("__MluaTypedUserDataRegistration_{type_name}");
 
@@ -647,20 +648,24 @@ pub fn derive(input: &mut ItemImpl) -> TokenStream {
 
     quote! {
         #[allow(non_snake_case)]
-        fn #register_fn_name(registry: &mut ::mlua_extras::typed::TypedUserDataRegistry<#type_path>) {
+        fn #register_fn_name<T: ::mlua_extras::typed::TypedDataFields<#type_path> + ::mlua_extras::typed::TypedDataMethods<#type_path>>(registry: &mut T) {
             use ::mlua_extras::typed::{TypedDataFields as _, TypedDataMethods as _};
             #(#registration_calls)*
         }
 
         #[allow(non_snake_case)]
+        fn #register_fn_name_unwrapped(registry: &mut ::mlua_extras::typed::TypedUserDataRegistry<#type_path>) {
+            #register_fn_name(registry);
+        }
+
+        #[allow(non_snake_case)]
         fn #register_fn_name_wrapped<'ctx>(registry: &mut ::mlua_extras::typed::registry::wrapper::TypedUserDataRegistry<'ctx, ::mlua_extras::mlua::userdata::UserDataRegistry<#type_path>>) {
-            use ::mlua_extras::typed::{TypedDataFields as _, TypedDataMethods as _};
-            #(#registration_calls)*
+            #register_fn_name(registry);
         }
 
         ::mlua::__inventory::submit! {
             #registration_type_name {
-                register: #register_fn_name,
+                register: #register_fn_name_unwrapped,
                 register_wrapped: #register_fn_name_wrapped,
             }
         }

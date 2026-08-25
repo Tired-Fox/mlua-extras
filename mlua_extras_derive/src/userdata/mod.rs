@@ -1,5 +1,5 @@
 use proc_macro2::TokenStream;
-use syn::{Attribute, Data, DeriveInput, Error, Fields, FieldsNamed};
+use syn::{Attribute, Data, DeriveInput, Error, Fields, FieldsNamed, LitStr, Meta};
 
 pub mod attr;
 use attr::validate_field_attr;
@@ -24,6 +24,29 @@ pub(crate) fn with_cfg(
         #(#cfgs)*
         #tokens
     }
+}
+
+/// Collect the `#[doc = "..."]` attributes to assign to typed documentation
+pub(crate) fn collect_docs(attrs: &[Attribute]) -> Option<String> {
+    let docs: Vec<_> = (attrs.iter())
+        .filter(|attr| attr.path().is_ident("doc"))
+        .collect();
+
+    if docs.is_empty() {
+        return None;
+    }
+
+    Some(
+        docs.into_iter()
+            .filter_map(|a| {
+                let Meta::NameValue(name) = &a.meta else { return None };
+                let syn::Expr::Lit(lit) = &name.value else { return None };
+                let syn::Lit::Str(name) = &lit.lit else { return None };
+                Some(name.value().trim().to_string())
+            })
+            .collect::<Vec<_>>()
+            .join("\n"),
+    )
 }
 
 pub fn derive(input: &DeriveInput) -> TokenStream {
@@ -56,6 +79,11 @@ pub fn derive(input: &DeriveInput) -> TokenStream {
     }
 
     let mut field_registrations = Vec::new();
+
+    if let Some(docs) = collect_docs(&input.attrs) {
+        field_registrations.push(quote! { registry.add(#docs); });
+    }
+
     if let Some(fields) = &named_fields {
         for field in &fields.named {
             let field_name = field.ident.as_ref().unwrap();
@@ -95,7 +123,10 @@ pub fn derive(input: &DeriveInput) -> TokenStream {
 
     let registration_type_name = format_ident!("__MluaTypedUserDataRegistration_{type_name}");
     let registration_fields_fn_name = format_ident!("__mlua_register_{type_name}_fields");
-    let registration_fields_fn_name_wrapped = format_ident!("__mlua_register_{type_name}_fields_wrapped");
+    let registration_fields_fn_name_unwrapped =
+        format_ident!("__mlua_register_{type_name}_fields_unwrapped");
+    let registration_fields_fn_name_wrapped =
+        format_ident!("__mlua_register_{type_name}_fields_wrapped");
 
     let typed_impl = typed::derive(&input);
 
@@ -110,20 +141,24 @@ pub fn derive(input: &DeriveInput) -> TokenStream {
         ::mlua_extras::mlua::__inventory::collect!(#registration_type_name);
 
         #[allow(non_snake_case)]
-        fn #registration_fields_fn_name(registry: &mut ::mlua_extras::typed::registry::TypedUserDataRegistry<#type_name>) {
-            use ::mlua_extras::typed::TypedDataFields as _;
+        fn #registration_fields_fn_name<T: ::mlua_extras::typed::TypedDataDocumentation<#type_name> + ::mlua_extras::typed::TypedDataFields<#type_name>>(registry: &mut T) {
+            use ::mlua_extras::typed::{TypedDataDocumentation as _, TypedDataFields as _};
             #(#field_registrations)*
         }
 
         #[allow(non_snake_case)]
+        fn #registration_fields_fn_name_unwrapped(registry: &mut ::mlua_extras::typed::registry::TypedUserDataRegistry<#type_name>) {
+            #registration_fields_fn_name(registry);
+        }
+
+        #[allow(non_snake_case)]
         fn #registration_fields_fn_name_wrapped<'ctx>(registry: &mut ::mlua_extras::typed::registry::wrapper::TypedUserDataRegistry<'ctx, ::mlua_extras::mlua::userdata::UserDataRegistry<#type_name>>) {
-            use ::mlua_extras::typed::TypedDataFields as _;
-            #(#field_registrations)*
+            #registration_fields_fn_name(registry);
         }
 
         ::mlua_extras::mlua::__inventory::submit! {
             #registration_type_name {
-                register: #registration_fields_fn_name,
+                register: #registration_fields_fn_name_unwrapped,
                 register_wrapped: #registration_fields_fn_name_wrapped,
             }
         }

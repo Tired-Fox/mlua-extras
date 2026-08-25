@@ -58,4 +58,4 @@ required-features = ["mlua"]
 
 [[example]]
 name = "typed"
-required-features = ["mlua", "macros", "serde"]
+required-features = ["mlua", "macros", "userdata-wrappers"]

@@ -687,7 +687,7 @@ fn test_mismatch_variadic_erases_to_any() {
     ));
     assert_eq!(
         out.trim(),
-        "declare function log(param1: string, param2: any): ()"
+        "declare function log(param1: string, ...: any): ()"
     );
 }
 

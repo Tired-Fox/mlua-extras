@@ -7,16 +7,14 @@ pub use registry::{
     TypedUserData, TypedUserDataRegistry,
 };
 
-use std::{
-    borrow::Cow,
-    collections::{BTreeMap, BTreeSet, HashMap, HashSet},
-    marker::PhantomData,
-};
 #[cfg(feature = "userdata-wrappers")]
 use std::{
     cell::{Cell, RefCell},
     rc::Rc,
     sync::{Arc, Mutex},
+};
+use std::{
+    borrow::Cow, collections::{BTreeMap, BTreeSet, HashMap, HashSet}, marker::PhantomData,
 };
 
 pub use function::{Param, Return, TypedFunction};
@@ -440,6 +438,11 @@ pub trait Typed {
         Self::ty()
     }
 
+    /// Tell whether the type is variadic
+    fn is_variadic() -> bool {
+        false
+    }
+
     /// Get the type as a function return
     fn as_return() -> Type {
         Self::ty()
@@ -497,7 +500,7 @@ impl_static_typed! {
     mlua::LightUserData => "lightuserdata",
     mlua::Error => "error",
     String | &str => "string",
-    u8 | u16 | u32 | u64 | usize | u128 | i8 | i16 | i32 | i64 | isize | i128 => "integer",
+    u8 | u16 | u32 | u64 | usize | i8 | i16 | i32 | i64 | isize => "integer",
     f32 | f64 => "number",
     bool => "boolean",
 
@@ -550,6 +553,11 @@ impl<T: Typed> Typed for Variadic<T> {
     /// ...type
     fn ty() -> Type {
         Type::any()
+    }
+
+    #[inline(always)]
+    fn is_variadic() -> bool {
+        true
     }
 }
 
@@ -839,7 +847,7 @@ macro_rules! impl_typed_multi_value {
                 Vec::from([
                     $(Param {
                         doc: None,
-                        name: None,
+                        name: if $name::is_variadic() { Some("...".into()) } else { None },
                         ty: $name::as_param(),
                     },)*
                 ])
