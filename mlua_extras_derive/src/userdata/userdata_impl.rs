@@ -5,7 +5,7 @@ use syn::{parse_quote, Attribute, FnArg, Ident, ImplItem, ItemImpl, Pat, Result,
 
 use crate::userdata::{
     attr::{parse_attrs, validate_method_attr},
-    with_cfg,
+    collect_docs, with_cfg,
 };
 
 static BORROW_WRAPPERS: &[(&str, &str)] = &[
@@ -30,6 +30,8 @@ struct ArgInfo {
     ident: Ident,
     userdata_ref: Option<RefKind>,
     callback_type: Type,
+    variadic: bool,
+    docs: Option<String>,
 }
 
 enum Lua {
@@ -140,13 +142,27 @@ fn try_unwrap_option(ty: &Type) -> Option<&Type> {
     Some(inner)
 }
 
-fn parse_signature(sig: &Signature) -> Result<MethodInfo> {
+fn classify_variadic(ty: &Type) -> bool {
+    let Type::Path(p) = ty else { return false };
+    match p.path.segments.len() {
+        1 => p.path.segments[0].ident == "Variadic",
+        2 => p.path.segments[0].ident == "mlua" && p.path.segments[1].ident == "Variadic",
+        3 => {
+            p.path.segments[0].ident == "mlua_extras"
+                && p.path.segments[1].ident == "mlua"
+                && p.path.segments[2].ident == "Variadic"
+        }
+        _ => false,
+    }
+}
+
+fn parse_signature(sig: &mut Signature) -> Result<MethodInfo> {
     let mut instance = Instance::None;
     let mut lua = None;
     let mut args = Vec::new();
     let mut check_first_typed = true;
 
-    for param in &sig.inputs {
+    for param in &mut sig.inputs {
         match param {
             FnArg::Receiver(recv) if recv.reference.is_some() && recv.mutability.is_some() => {
                 instance = Instance::Ref(RefKind::Mut);
@@ -220,10 +236,17 @@ fn parse_signature(sig: &Signature) -> Result<MethodInfo> {
                     None => arg_type.clone(),
                 };
 
+                let is_variadic = classify_variadic(arg_type);
+
+                let docs = collect_docs(&typed.attrs);
+                typed.attrs.retain(|a| !a.path().is_ident("doc"));
+
                 args.push(ArgInfo {
                     ident,
+                    variadic: is_variadic,
                     userdata_ref: ref_kind,
                     callback_type,
+                    docs,
                 });
             }
         }
@@ -286,12 +309,14 @@ pub fn derive(input: &mut ItemImpl) -> TokenStream {
     static COUNTER: AtomicUsize = AtomicUsize::new(0);
     let unique_suffix = COUNTER.fetch_add(1, Ordering::Relaxed);
     let register_fn_name = format_ident!("__mlua_register_{type_name}_{unique_suffix}");
-    let register_fn_name_unwrapped = format_ident!("__mlua_register_{type_name}_unwrapped_{unique_suffix}");
-    let register_fn_name_wrapped = format_ident!("__mlua_register_{type_name}_wrapped_{unique_suffix}");
+    let register_fn_name_unwrapped =
+        format_ident!("__mlua_register_{type_name}_unwrapped_{unique_suffix}");
+    let register_fn_name_wrapped =
+        format_ident!("__mlua_register_{type_name}_wrapped_{unique_suffix}");
     let registration_type_name = format_ident!("__MluaTypedUserDataRegistration_{type_name}");
 
     let mut registration_calls = Vec::new();
-    for item in &input.items {
+    for item in &mut input.items {
         match item {
             ImplItem::Const(const_item) => {
                 let lua_attr = match parse_attrs(&const_item.attrs, validate_method_attr) {
@@ -300,6 +325,10 @@ pub fn derive(input: &mut ItemImpl) -> TokenStream {
                 };
                 if lua_attr.skip {
                     continue;
+                }
+
+                if let Some(docs) = collect_docs(&const_item.attrs) {
+                    registration_calls.push(quote!{ ::mlua_extras::typed::TypedDataFields::document(registry, #docs); });
                 }
 
                 if lua_attr.getter || lua_attr.setter {
@@ -333,6 +362,10 @@ pub fn derive(input: &mut ItemImpl) -> TokenStream {
                     continue;
                 }
 
+                if let Some(docs) = collect_docs(&method.attrs) {
+                    registration_calls.push(quote!{ ::mlua_extras::typed::TypedDataMethods::document(registry, #docs); });
+                }
+
                 let primary = [lua_attr.getter, lua_attr.setter, lua_attr.field];
                 let primary_count = primary.iter().filter(|&&x| x).count();
                 if primary_count > 1 {
@@ -353,12 +386,16 @@ pub fn derive(input: &mut ItemImpl) -> TokenStream {
                     .into();
                 }
 
-                let fn_name = &method.sig.ident;
-                let info = match parse_signature(&method.sig) {
+                let info = match parse_signature(&mut method.sig) {
                     Ok(v) => v,
                     Err(e) => return e.to_compile_error().into(),
                 };
+                let fn_name = &method.sig.ident;
                 let is_async = method.sig.asyncness.is_some();
+
+                for arg in &info.args {
+                    gen_arg_metadata(&mut registration_calls, arg);
+                }
 
                 if !is_async && matches!(info.lua, Some(Lua::Owned)) {
                     return syn::Error::new_spanned(
@@ -683,6 +720,24 @@ fn gen_arg_token(arg: &ArgInfo) -> TokenStream {
         Some(RefKind::OptionRef) => quote! { #ident.as_ref().map(|r| &**r) },
         Some(RefKind::OptionMut) => quote! { #ident.as_mut().map(|r| &mut **r) },
         None => quote! { #ident },
+    }
+}
+
+fn gen_arg_metadata(calls: &mut Vec<TokenStream>, arg: &ArgInfo) {
+    let name = arg.ident.to_string();
+    let docs = match arg.docs.as_ref() {
+        Some(docs) => quote! { #docs },
+        None => quote! { () },
+    };
+
+    if arg.variadic {
+        calls.push(
+            quote! { ::mlua_extras::typed::TypedDataMethods::param(registry, "...", #docs); },
+        );
+    } else {
+        calls.push(
+            quote! { ::mlua_extras::typed::TypedDataMethods::param(registry, #name, #docs); },
+        );
     }
 }
 

@@ -1,5 +1,5 @@
 use proc_macro2::TokenStream;
-use syn::{Attribute, Data, DeriveInput, Error, Fields, FieldsNamed, LitStr, Meta};
+use syn::{Attribute, Data, DeriveInput, Error, Fields, FieldsNamed, Meta};
 
 pub mod attr;
 use attr::validate_field_attr;
@@ -39,9 +39,15 @@ pub(crate) fn collect_docs(attrs: &[Attribute]) -> Option<String> {
     Some(
         docs.into_iter()
             .filter_map(|a| {
-                let Meta::NameValue(name) = &a.meta else { return None };
-                let syn::Expr::Lit(lit) = &name.value else { return None };
-                let syn::Lit::Str(name) = &lit.lit else { return None };
+                let Meta::NameValue(name) = &a.meta else {
+                    return None;
+                };
+                let syn::Expr::Lit(lit) = &name.value else {
+                    return None;
+                };
+                let syn::Lit::Str(name) = &lit.lit else {
+                    return None;
+                };
                 Some(name.value().trim().to_string())
             })
             .collect::<Vec<_>>()

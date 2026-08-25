@@ -1,4 +1,7 @@
-use crate::{MaybeSend, typed::IntoDocComment};
+use crate::{
+    MaybeSend,
+    typed::{IntoDocComment, TypedDataDocumentation, TypedUserData},
+};
 use mlua::{
     AnyUserData, FromLua, FromLuaMulti, IntoLua, IntoLuaMulti, Lua, UserData, UserDataFields,
     UserDataMethods,
@@ -9,12 +12,18 @@ use mlua::{UserDataRef, UserDataRefMut};
 use super::{Type, Typed, TypedDataFields, TypedDataMethods, TypedMultiValue};
 
 /// Wrapper around a [`UserDataFields`] and [`UserDataMethods`]
-/// to allow [`TypedUserData`](super::TypedUserData) implementations to be used for [`mlua::UserData`]
+/// to allow [`TypedUserData`] implementations to be used for [`mlua::UserData`]
 /// implementations
 pub struct TypedUserDataRegistry<'ctx, U>(&'ctx mut U);
 impl<'ctx, U> TypedUserDataRegistry<'ctx, U> {
     pub fn new(u: &'ctx mut U) -> Self {
         Self(u)
+    }
+}
+
+impl<'ctx, T: TypedUserData, U> TypedDataDocumentation<T> for TypedUserDataRegistry<'ctx, U> {
+    fn add(&mut self, _: &str) -> &mut Self {
+        self
     }
 }
 

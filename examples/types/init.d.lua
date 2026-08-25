@@ -4,14 +4,17 @@
 
 --- @alias Color "System" | "Xterm" | "Rgb"
 
+--- This is a doc comment section for the overall type
 --- @class Example
 --- @field color Color
 local _CLASS_Example_ = {
-	--- @param param1 string
+	--- Log a specific format with any lua types
+	--- @param format string
 	--- @param ... any
-	logAny = function(param1, ...) end,
-	--- @param param1 any
-	printAll = function(param1) end,
+	logAny = function(format, ...) end,
+	--- print all items
+	--- @param ... any All of the args
+	printAll = function(...) end,
 	__metatable = {
 		--- @param self Example
 		--- @return string

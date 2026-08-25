@@ -275,68 +275,77 @@ the creation of custom userdata types simple.
 ```rust
 use std::path::PathBuf;
 use mlua_extras::{
+    mlua::Value,
     TypedUserData,
     typed::generator::{
         Definition, DefinitionFileGenerator, Definitions, LuauDefinitionFileGenerator,
     },
-    typed_user_data_impl,
+    typeduserdata_impl,
 };
 
 /// Simple Counter
 #[derive(Clone, TypedUserData)]
 struct Counter { value: i64 }
 
-#[typed_user_data_impl]
+#[typeduserdata_impl]
 impl Counter {
     /// The default count
     const COUNT: usize = 10;
 
     /// Max count value
-    #[field]
+    #[lua(field, infallible)]
     fn max() -> i64 {
         i64::MAX
     }
 
     /// Min count value
-    #[field(rename = "MIN")]
+    #[lua(field, name = "MIN", infallible)]
     fn min() -> i64 {
         0
     }
 
+    /// Transform the value to `up`
+    #[lua(infallible)]
+    fn transform(
+        &self,
+        /// Macro defined param doc comment
+        value: Value
+    ) -> String {
+        "up".into()
+    }
+
     /// Direction of the counter
-    #[getter("direction")]
+    #[lua(getter, name = "direction", infallible)]
     fn get_direction(&self) -> String {
         "up".into()
     }
 
-    #[setter("direction")]
+    #[lua(setter, name = "direction", infallible)]
     fn set_direction(&mut self, dir: String) {
         println!("Direction: {dir}");
     }
 
     /// Get the current counter value
-    #[method]
+    #[lua(infallible)]
     fn get(&self) -> i64 { self.value }
 
     /// Increment the counter
-    #[method]
+    #[lua(infallible)]
     fn increment(&mut self) { self.value += 1 }
 
     /// Create a new table
-    #[method]
     fn create_table(&self, lua: &mlua::Lua) -> mlua::Result<mlua::Table> {
         lua.create_table()
     }
 
     /// String representation of the counter
-    #[metamethod(ToString)]
-    fn to_string(&self) -> String { format!("Counter({})", self.value) }
+    #[lua(meta, infallible)]
+    fn __tostring(&self) -> String { format!("Counter({})", self.value) }
 
     // Requires the `async` feature
     // Must be accessed from lua code with an entry of `mlua::Chunk::eval_async` or `mlua::Chunk::exec_async`
 
     /// Fetch the global counter online
-    #[method]
     async fn fetch(&self, lua: mlua::Lua, url: String) -> mlua::Result<String> {
         _ = lua;
         Ok(format!("fetched: {url}"))
@@ -382,34 +391,28 @@ local _CLASS_Counter_ = {
 	max = 9223372036854775807,
 	--- Create a new table
 	--- @param self Counter
-  --- @return table
-  create_table = function(self) end,
+	--- @return table
+	create_table = function(self) end,
 	--- Fetch the global counter online
 	--- @param self Counter
-  --- @param url string
-  --- @return string
-  fetch = function(self, url) end,
+	--- @param url string
+	--- @return string
+	fetch = function(self, url) end,
 	--- Get the current counter value
 	--- @param self Counter
-  --- @return integer
-  get = function(self) end,
+	--- @return integer
+	get = function(self) end,
 	--- Increment the counter
 	--- @param self Counter
-  increment = function(self) end,
+	increment = function(self) end,
+    --- 
+    --- @param value any Macro defined param doc comment
+    transform = function(self, value) end,
 	__metatable = {
-		--- @param param1 userdata
-    --- @param param2 any
-    --- @return any
-    __index = function(param1, param2) end,
-		--- @param param1 userdata
-    --- @param param2 any
-    --- @param param3 any
-    --- @return any | nil
-    __newindex = function(param1, param2, param3) end,
 		--- String representation of the counter
 		--- @param self Counter
-    --- @return string
-    __tostring = function(self) end,
+		--- @return string
+		__tostring = function(self) end,
   }
 }
 ```

@@ -7,14 +7,16 @@ pub use registry::{
     TypedUserData, TypedUserDataRegistry,
 };
 
+use std::{
+    borrow::Cow,
+    collections::{BTreeMap, BTreeSet, HashMap, HashSet},
+    marker::PhantomData,
+};
 #[cfg(feature = "userdata-wrappers")]
 use std::{
     cell::{Cell, RefCell},
     rc::Rc,
     sync::{Arc, Mutex},
-};
-use std::{
-    borrow::Cow, collections::{BTreeMap, BTreeSet, HashMap, HashSet}, marker::PhantomData,
 };
 
 pub use function::{Param, Return, TypedFunction};

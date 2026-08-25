@@ -1,12 +1,18 @@
+#![allow(unused_variables)]
+
 use std::path::PathBuf;
 
 use mlua_extras::{
-    Typed, TypedUserData, extras::LuaExtras, mlua::{self, FromLua, Lua, LuaSerdeExt, MetaMethod, UserData, Value, Variadic}, typed::{
-        Type, TypedDataFields, TypedDataMethods, TypedUserData,
+    Typed, TypedUserData,
+    extras::LuaExtras,
+    mlua::{self, FromLua, Lua, LuaSerdeExt, MetaMethod, UserData, Value, Variadic},
+    typed::{
+        Type, TypedDataMethods, TypedUserData,
         generator::{
             Definition, DefinitionFileGenerator, Definitions, LuauDefinitionFileGenerator,
         },
-    }, typeduserdata_impl,
+    },
+    typeduserdata_impl,
 };
 use serde::Deserialize;
 
@@ -90,7 +96,11 @@ struct Example {
 impl Example {
     /// print all items
     #[lua(name = "printAll", infallible)]
-    fn print_all(all: Variadic<String>) {}
+    fn print_all(
+        /// All of the args
+        all: Variadic<String>,
+    ) {
+    }
 
     /// Log a specific format with any lua types
     #[lua(name = "logAny", infallible)]
