@@ -2,7 +2,7 @@
 #![cfg(feature = "luau")]
 
 use crate::typed::{
-    Field, Func, Index, Param, Type, Typed, TypedClassBuilder, TypedUserData,
+    Field, Func, Index, Param, Type, Typed, TypedUserData, TypedUserDataRegistry,
     function::Return,
     generator::{Definition, DefinitionBuilder, Definitions, Entry, LuauDefinitionFileGenerator},
 };
@@ -31,7 +31,7 @@ fn with_value(
 ) -> DefinitionBuilder {
     builder
         .entries
-        .push(Entry::new_with(name, Type::Value(Box::new(ty)), doc));
+        .push(Entry::new_with(name, Type::Proxy(Box::new(ty)), doc));
     builder
 }
 
@@ -180,21 +180,20 @@ fn test_class_with_fields() {
     let out = generate(single(
         Definition::start().register_as(
             "Player",
-            Type::class(
-                TypedClassBuilder::default()
+            Type::with_class(
+                TypedUserDataRegistry::any()
                     .field("name", Type::string(), "Player name")
-                    .field("score", Type::integer(), ())
-                    .build(),
+                    .field("score", Type::integer(), ()),
             ),
         ),
     ));
     assert_eq!(
         out.trim(),
-        "declare class Player
+        "export type Player = {
 \t-- Player name
-\tname: string
-\tscore: number
-end"
+\tname: string,
+\tscore: number,
+}"
     );
 }
 
@@ -203,48 +202,36 @@ fn test_class_with_methods() {
     let out = generate(single(
         Definition::start().register_as(
             "Counter",
-            Type::class(
-                TypedClassBuilder::default()
+            Type::with_class(
+                TypedUserDataRegistry::any()
                     .field("value", Type::integer(), ())
                     .method::<(), i64>("getValue", "Get the current value")
-                    .method::<(i64,), ()>("add", ())
-                    .build(),
+                    .method::<(i64,), ()>("add", ()),
             ),
         ),
     ));
     assert_eq!(
         out.trim(),
-        "declare class Counter
-\tvalue: number
-\tfunction add(self, param1: number): ()
+        "export type Counter = {
+\tvalue: number,
+\tadd: (self: Counter, param1: number) -> (),
 \t-- Get the current value
-\tfunction getValue(self): number
-end"
+\tgetValue: (self: Counter) -> number,
+}"
     );
 }
 
 #[test]
 fn test_class_with_functions_separate_table() {
-    let out = generate(single(
-        Definition::start().register_as(
-            "Utils",
-            Type::class(
-                TypedClassBuilder::default()
-                    .function::<String, String>("upper", ())
-                    .build(),
-            ),
-        ),
-    ));
+    let out = generate(single(Definition::start().register_as(
+        "Utils",
+        Type::with_class(TypedUserDataRegistry::any().function::<String, String>("upper", ())),
+    )));
     // Static functions are emitted as a separate global table declaration
     assert_eq!(
         out.trim(),
-        "declare class Utils
-end
-
-declare function Utils_upper(param1: string): string
-
-declare Utils: {
-\tupper: typeof(Utils_upper),
+        "export type Utils = {
+\tupper: (param1: string) -> string,
 }"
     );
 }
@@ -254,39 +241,38 @@ fn test_class_with_meta_method() {
     let out = generate(single(
         Definition::start().register_as(
             "Obj",
-            Type::class(
-                TypedClassBuilder::default()
+            Type::with_class(
+                TypedUserDataRegistry::any()
                     .field("x", Type::number(), ())
-                    .meta_method::<(), String>("__tostring", ())
-                    .build(),
+                    .meta_method::<(), String>("__tostring", ()),
             ),
         ),
     ));
     assert_eq!(
         out.trim(),
-        "declare class Obj
-\tx: number
-\tfunction __tostring(self): string
-end"
+        "export type Obj = {
+\tx: number,
+\t__tostring: (self: Obj) -> string,
+}"
     );
 }
 
 #[test]
 fn test_class_with_meta_field() {
-    let mut builder = TypedClassBuilder::default();
-    builder.typed_class.meta_fields.insert(
+    let mut builder = TypedUserDataRegistry::any();
+    builder.raw.meta_fields.insert(
         Index::from("__count"),
         Field::new(Type::integer(), "Meta field"),
     );
     let out = generate(single(
-        Definition::start().register_as("Tracked", Type::class(builder.build())),
+        Definition::start().register_as("Tracked", Type::with_class(builder)),
     ));
     assert_eq!(
         out.trim(),
-        "declare class Tracked
+        "export type Tracked = {
 \t-- Meta field
-\t__count: number
-end"
+\t__count: number,
+}"
     );
 }
 
@@ -394,13 +380,13 @@ declare function greet(param1: string): ()"
 
 #[test]
 fn test_class_doc_comment() {
-    let mut builder = TypedClassBuilder::default();
-    builder.typed_class.type_doc = Some("A documented class".into());
+    let mut builder = TypedUserDataRegistry::any();
+    builder.raw.type_doc = Some("A documented class".into());
     // register_as uses Entry::new (no doc), so set doc on the entry directly
     let mut def_builder = Definition::start();
     def_builder.entries.push(Entry::new_with(
         "Documented",
-        Type::class(builder.build()),
+        Type::with_class(builder),
         Some("Top-level doc"),
     ));
     let out = generate(single(def_builder));
@@ -408,8 +394,8 @@ fn test_class_doc_comment() {
         out.trim(),
         "-- Top-level doc
 -- A documented class
-declare class Documented
-end"
+export type Documented = {
+}"
     );
 }
 
@@ -512,12 +498,11 @@ fn test_luau_lsp_class_fields_and_methods() {
     let out = generate(single(with_value(
         Definition::start().register_as(
             "Player",
-            Type::class(
-                TypedClassBuilder::default()
+            Type::with_class(
+                TypedUserDataRegistry::any()
                     .field("name", Type::string(), ())
                     .field("score", Type::integer(), ())
-                    .method::<(), String>("getName", ())
-                    .build(),
+                    .method::<(), String>("getName", ()),
             ),
         ),
         "player",
@@ -539,11 +524,10 @@ fn test_luau_lsp_class_with_meta_method() {
     let out = generate(single(with_value(
         Definition::start().register_as(
             "Obj",
-            Type::class(
-                TypedClassBuilder::default()
+            Type::with_class(
+                TypedUserDataRegistry::any()
                     .field("x", Type::number(), ())
-                    .meta_method::<(), String>("__tostring", ())
-                    .build(),
+                    .meta_method::<(), String>("__tostring", ()),
             ),
         ),
         "obj",
@@ -564,11 +548,11 @@ fn test_luau_lsp_optional_type() {
     let out = generate(single(with_value(
         Definition::start().register_as(
             "Container",
-            Type::class(
-                TypedClassBuilder::default()
-                    .field("value", Type::string() | Type::nil(), ())
-                    .build(),
-            ),
+            Type::with_class(TypedUserDataRegistry::any().field(
+                "value",
+                Type::string() | Type::nil(),
+                (),
+            )),
         ),
         "c",
         Type::named("Container"),
@@ -576,9 +560,9 @@ fn test_luau_lsp_optional_type() {
     )));
     assert_eq!(
         out.trim(),
-        "declare class Container
-\tvalue: string?
-end
+        "export type Container = {
+\tvalue: string?,
+}
 
 declare c: Container"
     );
@@ -595,11 +579,11 @@ fn test_luau_lsp_array_type() {
     let out = generate(single(with_value(
         Definition::start().register_as(
             "Holder",
-            Type::class(
-                TypedClassBuilder::default()
-                    .field("items", Type::array(Type::string()), ())
-                    .build(),
-            ),
+            Type::with_class(TypedUserDataRegistry::any().field(
+                "items",
+                Type::array(Type::string()),
+                (),
+            )),
         ),
         "h",
         Type::named("Holder"),
@@ -618,11 +602,11 @@ fn test_luau_lsp_map_type() {
     let out = generate(single(with_value(
         Definition::start().register_as(
             "Registry",
-            Type::class(
-                TypedClassBuilder::default()
-                    .field("data", Type::map(Type::string(), Type::number()), ())
-                    .build(),
-            ),
+            Type::with_class(TypedUserDataRegistry::any().field(
+                "data",
+                Type::map(Type::string(), Type::number()),
+                (),
+            )),
         ),
         "reg",
         Type::named("Registry"),
@@ -651,12 +635,11 @@ fn test_luau_lsp_complex_definition() {
                 )
                 .register_as(
                     "Example",
-                    Type::class(
-                        TypedClassBuilder::default()
+                    Type::with_class(
+                        TypedUserDataRegistry::any()
                             .field("color", Type::named("Color"), ())
                             .method::<(), String>("describe", ())
-                            .meta_method::<(), String>("__tostring", ())
-                            .build(),
+                            .meta_method::<(), String>("__tostring", ()),
                     ),
                 ),
             "example",
@@ -712,10 +695,10 @@ fn test_mismatch_variadic_erases_to_any() {
 /// called without `self` — no impedance mismatch.
 #[test]
 fn test_luau_lsp_static_functions() {
-    let mut builder = TypedClassBuilder::default()
+    let mut builder = TypedUserDataRegistry::any()
         .field("name", Type::string(), ())
         .method::<(), String>("getName", ());
-    builder.typed_class.functions.insert(
+    builder.raw.functions.insert(
         "create".into(),
         Func {
             params: vec![Param {
@@ -731,14 +714,14 @@ fn test_luau_lsp_static_functions() {
         },
     );
     let out = generate(single(with_value(
-        Definition::start().register_as("Player", Type::class(builder.build())),
+        Definition::start().register_as("Player", Type::with_class(builder)),
         "player",
         Type::named("Player"),
         None,
     )));
     validate_with_luau_lsp(
         &out,
-        "local p: Player = Player.create(\"alice\")\nlocal _n: string = p:getName()\nlocal _name: string = p.name\n",
+        "local p: Player = player.create(\"alice\")\nlocal _n: string = p:getName()\nlocal _name: string = p.name\n",
     );
 }
 
@@ -750,23 +733,17 @@ fn test_static_functions_separate_table() {
     let out = generate(single(
         Definition::start().register_as(
             "Factory",
-            Type::class(
-                TypedClassBuilder::default()
-                    .function::<String, i64>("create", "A static factory method")
-                    .build(),
+            Type::with_class(
+                TypedUserDataRegistry::any()
+                    .function::<String, i64>("create", "A static factory method"),
             ),
         ),
     ));
     assert_eq!(
         out.trim(),
-        "declare class Factory
-end
-
--- A static factory method
-declare function Factory_create(param1: string): number
-
-declare Factory: {
-\tcreate: typeof(Factory_create),
+        "export type Factory = {
+\t-- A static factory method
+\tcreate: (param1: string) -> number,
 }"
     );
 }
@@ -800,11 +777,10 @@ fn test_integer_maps_to_number() {
     let out = generate(single(with_value(
         Definition::start().register_as(
             "Stats",
-            Type::class(
-                TypedClassBuilder::default()
+            Type::with_class(
+                TypedUserDataRegistry::any()
                     .field("count", Type::integer(), "An integer field")
-                    .field("ratio", Type::number(), "A float field")
-                    .build(),
+                    .field("ratio", Type::number(), "A float field"),
             ),
         ),
         "stats",
@@ -813,12 +789,12 @@ fn test_integer_maps_to_number() {
     )));
     assert_eq!(
         out.trim(),
-        "declare class Stats
+        "export type Stats = {
 \t-- An integer field
-\tcount: number
+\tcount: number,
 \t-- A float field
-\tratio: number
-end
+\tratio: number,
+}
 
 declare stats: Stats"
     );
@@ -845,13 +821,12 @@ fn test_luau_lsp_integer_fields_accept_numeric_literals() {
         Definition::start()
             .register_as(
                 "Inventory",
-                Type::class(
-                    TypedClassBuilder::default()
+                Type::with_class(
+                    TypedUserDataRegistry::any()
                         .field("count", Type::integer(), ())
                         .field("weight", Type::number(), ())
                         .method::<(i32,), ()>("addItems", ())
-                        .method::<(), i64>("total", ())
-                        .build(),
+                        .method::<(), i64>("total", ()),
                 ),
             )
             .param("a", "")
@@ -920,7 +895,7 @@ fn test_user_data() {
 
     impl Typed for TestUserData {
         fn ty() -> Type {
-            Type::class(TypedClassBuilder::new::<Self>().build())
+            Type::class::<Self>()
         }
 
         fn as_param() -> Type {
@@ -963,18 +938,13 @@ fn test_user_data() {
     assert_eq!(
         out.trim(),
         r#"-- class doc test
-declare class TestUserData
+export type TestUserData = {
 	-- attr doc test
-	attr: string
+	attr: string,
+	-- function doc test
+	from: (param1: TestUserData) -> TestUserData,
 	-- method doc test
-	function to(self, param1: TestUserData): ()
-end
-
--- function doc test
-declare function TestUserData_from(param1: TestUserData): TestUserData
-
-declare TestUserData: {
-	from: typeof(TestUserData_from),
+	to: (self: TestUserData, param1: TestUserData) -> (),
 }"#
     );
 }

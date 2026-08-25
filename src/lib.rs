@@ -9,9 +9,7 @@ pub mod typed;
 pub use mlua;
 
 #[cfg(feature = "macros")]
-pub use mlua_extras_derive::{
-    Typed, TypedUserData, UserData, typed_user_data_impl, user_data_impl,
-};
+pub use mlua_extras_derive::{Typed, TypedUserData, typeduserdata_impl};
 
 #[cfg(feature = "send")]
 /// Used by the `send` feature

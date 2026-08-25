@@ -4,7 +4,7 @@ use mlua::{AnyUserData, FromLua};
 use mlua_extras::{
     TypedUserData,
     mlua::{self, Lua, Value},
-    typed_user_data_impl,
+    typeduserdata_impl,
 };
 
 // Test 1: Feild attribute parsing
@@ -13,16 +13,14 @@ use mlua_extras::{
 #[derive(Clone, TypedUserData)]
 struct TestNamedFields {
     normal: String,
-    #[field(skip)]
+    #[lua(skip)]
     skipped: bool,
-    #[field(readonly)]
+    #[lua(get)]
     readonly: i32,
-    #[field(writeonly)]
+    #[lua(set)]
     writeonly: f64,
-    #[field(rename = "colour")]
+    #[lua(name = "colour")]
     color: String,
-    #[field(rename = -1)]
-    value: Option<String>,
 }
 
 #[test]
@@ -38,7 +36,6 @@ fn test_named_field_registration() {
                 readonly: 4,
                 writeonly: 3.14,
                 color: "red".into(),
-                value: Some("Hello, world!".into()),
             },
         )
         .unwrap();
@@ -76,104 +73,23 @@ fn test_named_field_registration() {
 
     let result = lua.load("return obj.color").eval::<Value>();
     assert!(result.is_err());
-
-    // Rename field: Named fields renamed to an index are only indexable
-    let val: Option<String> = lua.load("return obj[-1]").eval().unwrap();
-    assert_eq!(val.as_deref(), Some("Hello, world!"));
-    lua.load("obj[-1] = nil").exec().unwrap();
-    let val: Option<String> = lua.load("return obj[-1]").eval().unwrap();
-    assert_eq!(val, None);
-    let result = lua.load("return obj.value").eval::<Value>();
-    assert!(result.is_err());
 }
 
-#[allow(dead_code)]
-#[derive(Clone, TypedUserData)]
-struct TestIndexedFields(
-    String,
-    #[field(skip)] bool,
-    #[field(readonly)] i32,
-    #[field(writeonly)] f64,
-    #[field(rename = -1)] String,
-    #[field(rename = "value")] Option<String>,
-);
-
-#[test]
-fn test_indexed_field_registration() {
-    let lua = Lua::new();
-
-    lua.globals()
-        .set(
-            "obj",
-            TestIndexedFields(
-                "test".into(),
-                true,
-                4,
-                3.14,
-                "red".into(),
-                Some("Hello, world!".into()),
-            ),
-        )
-        .unwrap();
-
-    // Read + Write field
-    let val: String = lua.load("return obj[1]").eval().unwrap();
-    assert_eq!(val, "test");
-    lua.load("obj[1] = 'testing'").exec().unwrap();
-    let val: String = lua.load("return obj[1]").eval().unwrap();
-    assert_eq!(val, "testing");
-
-    // Skip field: not accessible (throws error)
-    let result = lua.load("return obj[2]").eval::<Value>();
-    assert!(result.is_err());
-
-    // Readonly field: Fails on write
-    let val: i32 = lua.load("return obj[3]").eval().unwrap();
-    assert_eq!(val, 4);
-    let result = lua.load("obj[3] = 100").exec();
-    assert!(result.is_err());
-
-    // Writeonly field: Fails on read
-    let result = lua.load("return obj[4]").eval::<Value>();
-    assert!(result.is_err());
-    let result = lua.load("obj[4] = 6.28").exec();
-    assert!(result.is_ok());
-
-    // Renamed field: accessible only via the rename value
-    let val: String = lua.load("return obj[-1]").eval().unwrap();
-    assert_eq!(val, "red");
-    lua.load("obj[-1] = 'blue'").exec().unwrap();
-    let val: String = lua.load("return obj[-1]").eval().unwrap();
-    assert_eq!(val, "blue");
-
-    let result = lua.load("return obj[5]").eval::<Value>();
-    assert!(result.is_err());
-
-    // Rename field: Named fields renamed to an index are only indexable
-    let val: Option<String> = lua.load("return obj.value").eval().unwrap();
-    assert_eq!(val.as_deref(), Some("Hello, world!"));
-    lua.load("obj.value = nil").exec().unwrap();
-    let val: Option<String> = lua.load("return obj.value").eval().unwrap();
-    assert_eq!(val, None);
-    let result = lua.load("return obj[6]").eval::<Value>();
-    assert!(result.is_err());
-}
-
-// Test 2: Methods with rename
+// Test 1: Methods with rename
 
 #[derive(Clone, TypedUserData)]
 struct Calculator {
     value: f64,
 }
 
-#[typed_user_data_impl]
+#[typeduserdata_impl]
 impl Calculator {
-    #[method]
+    #[lua(infallible)]
     fn add(&self, x: f64) -> f64 {
         self.value + x
     }
 
-    #[method(rename = "divide")]
+    #[lua(name = "divide")]
     fn checked_divide(&self, x: f64) -> mlua::Result<f64> {
         if x == 0.0 {
             Err(mlua::Error::runtime("division by zero"))
@@ -182,7 +98,7 @@ impl Calculator {
         }
     }
 
-    #[method]
+    #[lua(infallible)]
     fn get_value_and_double(&self) -> (f64, f64) {
         (self.value, self.value * 2.0)
     }
@@ -220,28 +136,28 @@ fn test_method_registration() {
     assert_eq!(b, 20.0);
 }
 
-// Test 3: Metamethods
+// Test 2: Metamethods
 
 #[derive(Clone, TypedUserData)]
 struct Stringable {
     value: String,
 }
 
-#[typed_user_data_impl]
+#[typeduserdata_impl]
 impl Stringable {
-    #[metamethod(ToString)]
-    fn to_string_repr(&self) -> String {
+    #[lua(meta, infallible)]
+    fn __tostring(&self) -> String {
         format!("Stringable({})", self.value)
     }
 
-    #[metamethod(Len)]
-    fn len(&self) -> usize {
+    #[lua(meta, infallible)]
+    fn __len(&self) -> usize {
         self.value.len()
     }
 
-    #[metamethod("__half")]
+    #[lua(meta, name = "__half", infallible)]
     fn first_half(&self) -> String {
-        let c = self.len();
+        let c = self.__len();
         self.value[0..c / 2].to_string()
     }
 }
@@ -283,16 +199,16 @@ fn test_metamethods() {
     assert_eq!(result, "hello,");
 }
 
-// Test 4: Mutable Methods
+// Test 3: Mutable Methods
 
 #[derive(Clone, TypedUserData)]
 struct MutCalc {
     value: f64,
 }
 
-#[typed_user_data_impl]
+#[typeduserdata_impl]
 impl MutCalc {
-    #[method]
+    #[lua(infallible)]
     fn set_value(&mut self, x: f64) {
         self.value = x;
     }
@@ -308,19 +224,18 @@ fn test_mut_method() {
     assert_eq!(result, 42.0);
 }
 
-// Test 5: Optional lua parameter
+// Test 4: Optional lua parameter
 
 #[derive(Clone, TypedUserData)]
 struct LuaAccess;
 
-#[typed_user_data_impl]
+#[typeduserdata_impl]
 impl LuaAccess {
-    #[method]
     fn create_table(&self, lua: &Lua) -> mlua::Result<mlua::Table> {
         lua.create_table()
     }
 
-    #[method]
+    #[lua(infallible)]
     fn no_lua(&self) -> String {
         "test".into()
     }
@@ -336,19 +251,19 @@ fn test_optional_lua_param() {
     assert_eq!(result, "test");
 }
 
-// Test 6: Static functions (no self)
+// Test 5: Static functions (no self)
 
 #[derive(Clone, TypedUserData)]
 struct MathUtils;
 
-#[typed_user_data_impl]
+#[typeduserdata_impl]
 impl MathUtils {
-    #[method]
+    #[lua(infallible)]
     fn add(a: f64, b: f64) -> f64 {
         a + b
     }
 
-    #[method(rename = "create")]
+    #[lua(name = "create")]
     fn new_instance(lua: &Lua) -> mlua::Result<mlua::Table> {
         lua.create_table()
     }
@@ -366,7 +281,7 @@ fn test_static_functions() {
     assert!(result.is_empty());
 }
 
-// Test 7: Static meta functions (no self)
+// Test 6: Static meta functions (no self)
 
 #[derive(Debug, Clone, TypedUserData, PartialEq)]
 struct Vec2(f64, f64);
@@ -394,15 +309,15 @@ impl FromLua for Vec2 {
     }
 }
 
-#[typed_user_data_impl]
+#[typeduserdata_impl]
 impl Vec2 {
-    #[metamethod(Add)]
-    fn add(a: Self, b: Self) -> Self {
+    #[lua(meta, infallible)]
+    fn __add(a: Vec2, b: Vec2) -> Self {
         Vec2(a.0 + b.0, a.1 + b.1)
     }
 
-    #[metamethod("__dot")]
-    fn dot_product(a: Self, b: Self) -> f64 {
+    #[lua(meta, name = "__dot", infallible)]
+    fn dot_product(a: Vec2, b: Vec2) -> f64 {
         (a.0 * b.0) + (a.1 * b.1)
     }
 }
@@ -442,7 +357,7 @@ fn test_static_meta_functions() {
     assert_eq!(result, 16.0);
 }
 
-// Test 8: Async Methods
+// Test 7: Async Methods
 
 #[cfg(feature = "async")]
 mod async_tests {
@@ -453,14 +368,12 @@ mod async_tests {
         prefix: String,
     }
 
-    #[typed_user_data_impl]
+    #[typeduserdata_impl]
     impl AsyncWorker {
-        #[method]
         async fn process(&self, input: String) -> mlua::Result<String> {
             Ok(format!("{}: {input}", self.prefix))
         }
 
-        #[method]
         async fn with_lua(&self, lua: Lua, key: String) -> mlua::Result<Value> {
             lua.globals().get(key)
         }

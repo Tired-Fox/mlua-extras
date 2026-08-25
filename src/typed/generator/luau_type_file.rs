@@ -15,10 +15,10 @@ use super::{Definition, Definitions};
 ///
 /// ```luau
 /// -- Example class
-/// declare class Example
-///     name: string
-///     function run(self): boolean
-/// end
+/// export type Example = {
+///     name: string,
+///     run: (self: Example) -> boolean,
+/// }
 ///
 /// declare example: Example
 /// ```
@@ -103,7 +103,7 @@ impl<'writer> LuauDefinitionWriter<'writer> {
             first = false;
 
             match &definition.ty {
-                Type::Value(ty) => {
+                Type::Proxy(ty) => {
                     self.write_doc_comments(&mut buffer, &[definition.doc.as_deref()], "")?;
                     writeln!(
                         buffer,
@@ -122,11 +122,12 @@ impl<'writer> LuauDefinitionWriter<'writer> {
                         &[definition.doc.as_deref(), type_data.type_doc.as_deref()],
                         "",
                     )?;
-                    write!(buffer, "declare class {}", definition.name)?;
+                    write!(buffer, "export type {} =", definition.name)?;
                     if !type_data.derives.is_empty() {
-                        write!(buffer, " extends {}", type_data.derives.join(", "))?;
+                        write!(buffer, " ")?;
+                        write!(buffer, "{}", type_data.derives.join(" & "))?;
                     }
-                    writeln!(buffer)?;
+                    writeln!(buffer, " {{")?;
 
                     // Instance fields
                     for (name, field) in type_data.fields.iter() {
@@ -134,7 +135,25 @@ impl<'writer> LuauDefinitionWriter<'writer> {
                             continue;
                         }
                         self.write_doc_comments(&mut buffer, &[field.doc.as_deref()], "\t")?;
-                        writeln!(buffer, "\t{}: {}", name, self.type_signature(&field.ty)?)?;
+                        writeln!(buffer, "\t{}: {},", name, self.type_signature(&field.ty)?)?;
+                    }
+
+                    // Meta fields
+                    for (name, field) in type_data.meta_fields.iter() {
+                        self.write_doc_comments(&mut buffer, &[field.doc.as_deref()], "\t")?;
+                        writeln!(buffer, "\t{}: {},", name, self.type_signature(&field.ty)?)?;
+                    }
+
+                    // Functions: (without self)
+                    for (name, func) in type_data.functions.iter() {
+                        self.write_doc_comments(&mut buffer, &[func.doc.as_deref()], "\t")?;
+                        writeln!(
+                            buffer,
+                            "\t{}: ({}) -> {},",
+                            name,
+                            self.param_list(&func.params)?,
+                            self.return_type(&func.returns)?,
+                        )?;
                     }
 
                     // Methods (with self)
@@ -142,18 +161,25 @@ impl<'writer> LuauDefinitionWriter<'writer> {
                         self.write_doc_comments(&mut buffer, &[func.doc.as_deref()], "\t")?;
                         writeln!(
                             buffer,
-                            "\tfunction {}(self{}{}): {}",
+                            "\t{}: (self: {}{}{}) -> {},",
                             name,
+                            definition.name,
                             if func.params.is_empty() { "" } else { ", " },
                             self.param_list(&func.params)?,
                             self.return_type(&func.returns)?,
                         )?;
                     }
 
-                    // Meta fields
-                    for (name, field) in type_data.meta_fields.iter() {
-                        self.write_doc_comments(&mut buffer, &[field.doc.as_deref()], "\t")?;
-                        writeln!(buffer, "\t{}: {}", name, self.type_signature(&field.ty)?)?;
+                    // Meta functions (without self)
+                    for (name, func) in type_data.meta_functions.iter() {
+                        self.write_doc_comments(&mut buffer, &[func.doc.as_deref()], "\t")?;
+                        writeln!(
+                            buffer,
+                            "\t{}: ({}) -> {},",
+                            name,
+                            self.param_list(&func.params)?,
+                            self.return_type(&func.returns)?,
+                        )?;
                     }
 
                     // Meta methods (with self)
@@ -163,68 +189,16 @@ impl<'writer> LuauDefinitionWriter<'writer> {
                         self.write_return_doc_comments(&mut buffer, &func.returns, "\t")?;
                         writeln!(
                             buffer,
-                            "\tfunction {}(self{}{}): {}",
+                            "\t{}: (self: {}{}{}) -> {},",
                             name,
+                            definition.name,
                             if func.params.is_empty() { "" } else { ", " },
                             self.param_list(&func.params)?,
                             self.return_type(&func.returns)?,
                         )?;
                     }
 
-                    writeln!(buffer, "end")?;
-
-                    // Static functions and meta_functions are emitted as a
-                    // separate global table declaration, since `declare class`
-                    // requires `self` on every function.
-                    //
-                    // They are first declared themselves to give them richer type information.
-                    // Then they are added to a global table declaration with `typeof()`.
-                    let static_fns: Vec<_> = type_data
-                        .functions
-                        .iter()
-                        .chain(type_data.meta_functions.iter())
-                        .collect();
-
-                    if !static_fns.is_empty() {
-                        writeln!(buffer)?;
-                    }
-
-                    for (name, func) in static_fns.iter() {
-                        self.write_doc_comments(&mut buffer, &[func.doc.as_deref()], "")?;
-                        self.write_param_doc_comments(&mut buffer, &func.params, "")?;
-                        self.write_return_doc_comments(&mut buffer, &func.returns, "")?;
-                        writeln!(
-                            buffer,
-                            "declare function {}_{name}({}): {}",
-                            definition.name,
-                            self.param_list(&func.params)?,
-                            self.return_type(&func.returns)?,
-                        )?;
-                    }
-
-                    if !static_fns.is_empty() || !type_data.static_fields.is_empty() {
-                        writeln!(buffer)?;
-                        writeln!(buffer, "declare {}: {{", definition.name)?;
-
-                        for (name, field) in type_data.static_fields.iter() {
-                            self.write_doc_comments(
-                                &mut buffer,
-                                &[field.inner.doc.as_deref()],
-                                "\t",
-                            )?;
-                            writeln!(
-                                buffer,
-                                "\t{}: {},",
-                                name,
-                                self.type_signature(&field.inner.ty)?
-                            )?;
-                        }
-
-                        for (name, _func) in &static_fns {
-                            writeln!(buffer, "\t{name}: typeof({}_{name}),", definition.name,)?;
-                        }
-                        writeln!(buffer, "}}")?;
-                    }
+                    writeln!(buffer, "}}")?;
                 }
                 Type::Enum(types) => {
                     self.name_map
@@ -300,6 +274,9 @@ impl<'writer> LuauDefinitionWriter<'writer> {
                     // defined luau class types. This will erase the generic userdata
                     // types to `any`.
                     "userdata" | "lightuserdata" => "any".into(),
+                    // Luau doesn't have a base table type. Instead use object syntax to make
+                    // a type representation equal to `table`
+                    "table" => "{ [any]: any }".into(),
                     // Luau recognizes `integer` as a type, but numeric literals
                     // are inferred as `number` and the two are mutually incompatible,
                     // making `integer` unusable in practice. Emit `number` instead.

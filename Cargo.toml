@@ -35,26 +35,22 @@ anyhow = ["mlua/anyhow"]
 userdata-wrappers = ["mlua/userdata-wrappers"]
 
 [dev-dependencies]
-serde = { version = "1.0.228", features = ["derive"] }
+serde = { version = "1.0.229", features = ["derive"] }
 tempfile = "3"
-tokio = { version = "1", features = ["macros", "rt"] }
+tokio = { version = "1.0", features = ["macros", "rt"] }
 
 [dependencies]
 mlua-extras-derive = { path = "./mlua_extras_derive", version = "11.6.0", optional = true }
 
-mlua = { version = "0.11.6", optional = true, default-features = false, features = ["serde"] }
+mlua = { version = "0.12.0", optional = true, default-features = false, features = ["serde"] }
 
-serde = { version = "1.0.228" }
-strum = { version = "0.27.2", features = ["derive"], default-features = false }
+serde = { version = "1.0.229" }
+strum = { version = "0.28.0", features = ["derive"], default-features = false }
 ryu = "1.0.23"
 
 [[example]]
 name = "macros"
-required-features = ["mlua", "macros"]
-
-[[example]]
-name = "enum_and_tuple"
-required-features = ["mlua"]
+required-features = ["mlua", "macros", "async"]
 
 [[example]]
 name = "path"

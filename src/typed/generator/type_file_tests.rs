@@ -1,7 +1,7 @@
 #![cfg(test)]
 
 use crate::typed::{
-    Index, Param, Type, Typed, TypedClassBuilder, TypedUserData,
+    Index, Param, Type, Typed, TypedUserData, TypedUserDataRegistry,
     function::Return,
     generator::{Definition, DefinitionBuilder, DefinitionFileGenerator, Definitions, Entry},
 };
@@ -30,7 +30,7 @@ fn with_value(
 ) -> DefinitionBuilder {
     builder
         .entries
-        .push(Entry::new_with(name, Type::Value(Box::new(ty)), doc));
+        .push(Entry::new_with(name, Type::Proxy(Box::new(ty)), doc));
     builder
 }
 
@@ -255,11 +255,7 @@ fn test_value_named_class_type() {
     let out = generate(single(with_value(
         Definition::start().register_as(
             "Player",
-            Type::class(
-                TypedClassBuilder::default()
-                    .field("name", Type::string(), ())
-                    .build(),
-            ),
+            Type::with_class(TypedUserDataRegistry::any().field("name", Type::string(), ())),
         ),
         "player",
         Type::named("Player"),
@@ -392,7 +388,7 @@ function ["some.name"]() end"#
 #[test]
 fn test_class_empty() {
     let out = generate(single(
-        Definition::start().register_as("Empty", Type::class(TypedClassBuilder::default().build())),
+        Definition::start().register_as("Empty", Type::with_class(TypedUserDataRegistry::any())),
     ));
     assert_eq!(
         out.trim(),
@@ -407,11 +403,10 @@ fn test_class_with_fields() {
     let out = generate(single(
         Definition::start().register_as(
             "Player",
-            Type::class(
-                TypedClassBuilder::default()
+            Type::with_class(
+                TypedUserDataRegistry::any()
                     .field("name", Type::string(), ())
-                    .field("score", Type::integer(), ())
-                    .build(),
+                    .field("score", Type::integer(), ()),
             ),
         ),
     ));
@@ -427,16 +422,14 @@ fn test_class_with_fields() {
 
 #[test]
 fn test_class_field_with_doc() {
-    let out = generate(single(
-        Definition::start().register_as(
-            "Player",
-            Type::class(
-                TypedClassBuilder::default()
-                    .field("name", Type::string(), "The player's name")
-                    .build(),
-            ),
-        ),
-    ));
+    let out = generate(single(Definition::start().register_as(
+        "Player",
+        Type::with_class(TypedUserDataRegistry::any().field(
+            "name",
+            Type::string(),
+            "The player's name",
+        )),
+    )));
     assert_eq!(
         out.trim(),
         "--- @meta
@@ -449,12 +442,12 @@ fn test_class_field_with_doc() {
 
 #[test]
 fn test_class_doc_comments() {
-    let mut builder = TypedClassBuilder::default();
-    builder.typed_class.type_doc = Some("A class-level doc".into());
+    let mut builder = TypedUserDataRegistry::any();
+    builder.raw.type_doc = Some("A class-level doc".into());
     let mut def_builder = Definition::start();
     def_builder.entries.push(Entry::new_with(
         "Documented",
-        Type::class(builder.build()),
+        Type::with_class(builder),
         Some("Top-level doc"),
     ));
     let out = generate(single(def_builder));
@@ -470,16 +463,12 @@ fn test_class_doc_comments() {
 
 #[test]
 fn test_class_with_method_no_extra_params() {
-    let out = generate(single(
-        Definition::start().register_as(
-            "Foo",
-            Type::class(
-                TypedClassBuilder::default()
-                    .method::<(), String>("getValue", "Get the value")
-                    .build(),
-            ),
+    let out = generate(single(Definition::start().register_as(
+        "Foo",
+        Type::with_class(
+            TypedUserDataRegistry::any().method::<(), String>("getValue", "Get the value"),
         ),
-    ));
+    )));
     assert_eq!(
         out.trim(),
         "--- @meta
@@ -496,16 +485,10 @@ local _CLASS_Foo_ = {
 
 #[test]
 fn test_class_with_method_with_params() {
-    let out = generate(single(
-        Definition::start().register_as(
-            "Counter",
-            Type::class(
-                TypedClassBuilder::default()
-                    .method::<(i64,), ()>("add", ())
-                    .build(),
-            ),
-        ),
-    ));
+    let out = generate(single(Definition::start().register_as(
+        "Counter",
+        Type::with_class(TypedUserDataRegistry::any().method::<(i64,), ()>("add", ())),
+    )));
     assert_eq!(
         out.trim(),
         "--- @meta
@@ -521,16 +504,12 @@ local _CLASS_Counter_ = {
 
 #[test]
 fn test_class_with_static_function() {
-    let out = generate(single(
-        Definition::start().register_as(
-            "Utils",
-            Type::class(
-                TypedClassBuilder::default()
-                    .function::<String, i64>("create", "A factory")
-                    .build(),
-            ),
+    let out = generate(single(Definition::start().register_as(
+        "Utils",
+        Type::with_class(
+            TypedUserDataRegistry::any().function::<String, i64>("create", "A factory"),
         ),
-    ));
+    )));
     assert_eq!(
         out.trim(),
         "--- @meta
@@ -550,11 +529,10 @@ fn test_class_fields_and_methods_combined() {
     let out = generate(single(
         Definition::start().register_as(
             "Player",
-            Type::class(
-                TypedClassBuilder::default()
+            Type::with_class(
+                TypedUserDataRegistry::any()
                     .field("name", Type::string(), ())
-                    .method::<(), String>("getName", ())
-                    .build(),
+                    .method::<(), String>("getName", ()),
             ),
         ),
     ));
@@ -574,16 +552,14 @@ local _CLASS_Player_ = {
 
 #[test]
 fn test_class_with_meta_field() {
-    let out = generate(single(
-        Definition::start().register_as(
-            "Tracked",
-            Type::class(
-                TypedClassBuilder::default()
-                    .meta_field("__count", Type::integer(), "Meta count")
-                    .build(),
-            ),
-        ),
-    ));
+    let out = generate(single(Definition::start().register_as(
+        "Tracked",
+        Type::with_class(TypedUserDataRegistry::any().meta_field(
+            "__count",
+            Type::integer(),
+            "Meta count",
+        )),
+    )));
     assert_eq!(
         out.trim(),
         "--- @meta
@@ -604,11 +580,10 @@ fn test_class_with_meta_method() {
     let out = generate(single(
         Definition::start().register_as(
             "Obj",
-            Type::class(
-                TypedClassBuilder::default()
+            Type::with_class(
+                TypedUserDataRegistry::any()
                     .field("x", Type::number(), ())
-                    .meta_method::<(), String>("__tostring", ())
-                    .build(),
+                    .meta_method::<(), String>("__tostring", ()),
             ),
         ),
     ));
@@ -630,16 +605,12 @@ local _CLASS_Obj_ = {
 
 #[test]
 fn test_class_with_meta_function() {
-    let out = generate(single(
-        Definition::start().register_as(
-            "Indexed",
-            Type::class(
-                TypedClassBuilder::default()
-                    .meta_function::<(String,), String>("__index", ())
-                    .build(),
-            ),
+    let out = generate(single(Definition::start().register_as(
+        "Indexed",
+        Type::with_class(
+            TypedUserDataRegistry::any().meta_function::<(String,), String>("__index", ()),
         ),
-    ));
+    )));
     assert_eq!(
         out.trim(),
         "--- @meta
@@ -659,16 +630,14 @@ local _CLASS_Indexed_ = {
 
 #[test]
 fn test_type_sig_array() {
-    let out = generate(single(
-        Definition::start().register_as(
-            "Names",
-            Type::class(
-                TypedClassBuilder::default()
-                    .field("items", Type::array(Type::string()), ())
-                    .build(),
-            ),
-        ),
-    ));
+    let out = generate(single(Definition::start().register_as(
+        "Names",
+        Type::with_class(TypedUserDataRegistry::any().field(
+            "items",
+            Type::array(Type::string()),
+            (),
+        )),
+    )));
     assert_eq!(
         out.trim(),
         "--- @meta
@@ -680,20 +649,14 @@ fn test_type_sig_array() {
 
 #[test]
 fn test_type_sig_tuple() {
-    let out = generate(single(
-        Definition::start().register_as(
-            "Pair",
-            Type::class(
-                TypedClassBuilder::default()
-                    .field(
-                        "coords",
-                        Type::tuple([Type::integer(), Type::integer()]),
-                        (),
-                    )
-                    .build(),
-            ),
-        ),
-    ));
+    let out = generate(single(Definition::start().register_as(
+        "Pair",
+        Type::with_class(TypedUserDataRegistry::any().field(
+            "coords",
+            Type::tuple([Type::integer(), Type::integer()]),
+            (),
+        )),
+    )));
     assert_eq!(
         out.trim(),
         "--- @meta
@@ -705,16 +668,14 @@ fn test_type_sig_tuple() {
 
 #[test]
 fn test_type_sig_map() {
-    let out = generate(single(
-        Definition::start().register_as(
-            "Registry",
-            Type::class(
-                TypedClassBuilder::default()
-                    .field("data", Type::map(Type::string(), Type::number()), ())
-                    .build(),
-            ),
-        ),
-    ));
+    let out = generate(single(Definition::start().register_as(
+        "Registry",
+        Type::with_class(TypedUserDataRegistry::any().field(
+            "data",
+            Type::map(Type::string(), Type::number()),
+            (),
+        )),
+    )));
     assert_eq!(
         out.trim(),
         "--- @meta
@@ -726,23 +687,17 @@ fn test_type_sig_map() {
 
 #[test]
 fn test_type_sig_table() {
-    let out = generate(single(
-        Definition::start().register_as(
-            "Config",
-            Type::class(
-                TypedClassBuilder::default()
-                    .field(
-                        "opts",
-                        Type::table([
-                            (Index::from("host"), Type::string()),
-                            (Index::from("port"), Type::integer()),
-                        ]),
-                        (),
-                    )
-                    .build(),
-            ),
-        ),
-    ));
+    let out = generate(single(Definition::start().register_as(
+        "Config",
+        Type::with_class(TypedUserDataRegistry::any().field(
+            "opts",
+            Type::table([
+                (Index::from("host"), Type::string()),
+                (Index::from("port"), Type::integer()),
+            ]),
+            (),
+        )),
+    )));
     assert_eq!(
         out.trim(),
         "--- @meta
@@ -754,16 +709,14 @@ fn test_type_sig_table() {
 
 #[test]
 fn test_type_sig_union() {
-    let out = generate(single(
-        Definition::start().register_as(
-            "Container",
-            Type::class(
-                TypedClassBuilder::default()
-                    .field("value", Type::string() | Type::nil(), ())
-                    .build(),
-            ),
-        ),
-    ));
+    let out = generate(single(Definition::start().register_as(
+        "Container",
+        Type::with_class(TypedUserDataRegistry::any().field(
+            "value",
+            Type::string() | Type::nil(),
+            (),
+        )),
+    )));
     // Note: the LuaLS generator does not have optional-type sugar (no `string?`);
     // `string | nil` is emitted as-is. This differs from the Luau generator.
     assert_eq!(
@@ -777,30 +730,24 @@ fn test_type_sig_union() {
 
 #[test]
 fn test_type_sig_function_inline() {
-    let out = generate(single(
-        Definition::start().register_as(
-            "Handler",
-            Type::class(
-                TypedClassBuilder::default()
-                    .field(
-                        "callback",
-                        Type::Function {
-                            params: vec![Param {
-                                name: Some("x".into()),
-                                ty: Type::number(),
-                                doc: None,
-                            }],
-                            returns: vec![Return {
-                                ty: Type::boolean(),
-                                doc: None,
-                            }],
-                        },
-                        (),
-                    )
-                    .build(),
-            ),
-        ),
-    ));
+    let out = generate(single(Definition::start().register_as(
+        "Handler",
+        Type::with_class(TypedUserDataRegistry::any().field(
+            "callback",
+            Type::Function {
+                params: vec![Param {
+                    name: Some("x".into()),
+                    ty: Type::number(),
+                    doc: None,
+                }],
+                returns: vec![Return {
+                    ty: Type::boolean(),
+                    doc: None,
+                }],
+            },
+            (),
+        )),
+    )));
     assert_eq!(
         out.trim(),
         "--- @meta
@@ -820,11 +767,7 @@ fn test_type_sig_enum_cross_reference() {
             .register_as("Color", color_enum.clone())
             .register_as(
                 "Widget",
-                Type::class(
-                    TypedClassBuilder::default()
-                        .field("color", color_enum, ())
-                        .build(),
-                ),
+                Type::with_class(TypedUserDataRegistry::any().field("color", color_enum, ())),
             ),
     ));
     assert_eq!(
@@ -843,22 +786,17 @@ fn test_type_sig_enum_cross_reference() {
 fn test_type_sig_class_cross_reference() {
     // Exercises the name_map: a field typed as a previously-registered class
     // resolves to the class's registered name.
-    let vec2 = Type::class(
-        TypedClassBuilder::default()
+    let vec2 = Type::with_class(
+        TypedUserDataRegistry::any()
             .field("x", Type::number(), ())
-            .field("y", Type::number(), ())
-            .build(),
+            .field("y", Type::number(), ()),
     );
     let out = generate(single(
         Definition::start()
             .register_as("Vec2", vec2.clone())
             .register_as(
                 "Sprite",
-                Type::class(
-                    TypedClassBuilder::default()
-                        .field("position", vec2, ())
-                        .build(),
-                ),
+                Type::with_class(TypedUserDataRegistry::any().field("position", vec2, ())),
             ),
     ));
     assert_eq!(
@@ -912,7 +850,7 @@ fn test_user_data() {
 
     impl Typed for TestUserData {
         fn ty() -> Type {
-            Type::class(TypedClassBuilder::new::<Self>().build())
+            Type::class::<Self>()
         }
 
         fn as_param() -> Type {
@@ -1050,11 +988,10 @@ fn test_luals_class_field_access() {
     let out = generate(single(with_value(
         Definition::start().register_as(
             "Player",
-            Type::class(
-                TypedClassBuilder::default()
+            Type::with_class(
+                TypedUserDataRegistry::any()
                     .field("name", Type::string(), ())
-                    .field("score", Type::integer(), ())
-                    .build(),
+                    .field("score", Type::integer(), ()),
             ),
         ),
         "player",
@@ -1076,11 +1013,7 @@ fn test_luals_class_method_call() {
     let out = generate(single(with_value(
         Definition::start().register_as(
             "Player",
-            Type::class(
-                TypedClassBuilder::default()
-                    .method::<(), String>("getName", ())
-                    .build(),
-            ),
+            Type::with_class(TypedUserDataRegistry::any().method::<(), String>("getName", ())),
         ),
         "player",
         Type::named("Player"),
@@ -1171,11 +1104,7 @@ fn test_luals_enum_referenced_in_class_field() {
             .register_as("Color", color_enum.clone())
             .register_as(
                 "Widget",
-                Type::class(
-                    TypedClassBuilder::default()
-                        .field("color", color_enum, ())
-                        .build(),
-                ),
+                Type::with_class(TypedUserDataRegistry::any().field("color", color_enum, ())),
             ),
         "widget",
         Type::named("Widget"),

@@ -416,7 +416,7 @@ local _CLASS_Counter_ = {
 
 ## Testing
 
-To run all the tests in one shot, use `cargo test --features luau,vendored,send,async,serialize,derive`
+To run all the tests in one shot, use `cargo test --features luau,vendored,send,async,userdata-wrappers,macros`
 
 Some features of this crate generate luau compatible definition files, or use
 luau specific features.  To add an additional layer of validation to the tests

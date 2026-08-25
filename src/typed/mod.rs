@@ -1,11 +1,10 @@
 mod function;
 pub mod generator;
 
-mod class;
-
-pub use class::{
-    TypedClass, TypedClassBuilder, TypedDataDocumentation, TypedDataFields, TypedDataMethods,
-    TypedUserData, WrappedBuilder,
+pub mod registry;
+pub use registry::{
+    RawTypedUserDataRegistry, TypedDataDocumentation, TypedDataFields, TypedDataMethods,
+    TypedUserData, TypedUserDataRegistry,
 };
 
 use std::{
@@ -110,7 +109,7 @@ pub enum Type {
     /// --- @type {type}
     /// value = nil
     /// ```
-    Value(Box<Type>),
+    Proxy(Box<Type>),
     /// Represents a type alias
     ///
     /// # Example
@@ -193,7 +192,7 @@ pub enum Type {
     /// --- @field age integer
     /// --- @field height number
     /// ```
-    Class(Box<TypedClass>),
+    Class(Box<RawTypedUserDataRegistry>),
 }
 
 /// Allows to union types
@@ -333,8 +332,13 @@ impl Type {
     }
 
     /// create a type that is a class. i.e. `--- @class {name}`
-    pub fn class(class: TypedClass) -> Self {
-        Self::Class(Box::new(class))
+    pub fn class<T: TypedUserData>() -> Self {
+        Self::Class(Box::new(TypedUserDataRegistry::new::<T>().build()))
+    }
+
+    /// create a type that is a class. i.e. `--- @class {name}`
+    pub fn with_class<T>(class: TypedUserDataRegistry<T>) -> Self {
+        Self::Class(Box::new(class.build()))
     }
 
     /// create a type that is a function. i.e. `fun(self): number`
@@ -500,7 +504,7 @@ impl_static_typed! {
     mlua::Function => "fun()",
     mlua::Table => "table",
     mlua::AnyUserData => "userdata",
-    mlua::String => "string",
+    mlua::LuaString => "string",
     mlua::Thread => "thread",
 }
 

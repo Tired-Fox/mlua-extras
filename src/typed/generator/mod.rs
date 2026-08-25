@@ -193,11 +193,24 @@ impl DefinitionBuilder {
     ///
     /// # Example
     /// ```
-    /// use mlua_extras::{typed::{generator::{Definitions, Definition}, TypedUserData, TypedDataFields}, Typed, UserData};
+    /// use mlua_extras::typed::{Typed, generator::{Definitions, Definition}, TypedUserData, TypedDataFields};
     ///
-    /// #[derive(UserData, Typed)]
     /// struct Example {
     ///     color: String
+    /// }
+    /// impl Typed for Example {
+    ///     fn ty() -> mlua_extras::typed::Type {
+    ///         mlua_extras::typed::Type::Class(Box::new(
+    ///             mlua_extras::typed::TypedUserDataRegistry::new::<Example>()
+    ///                 .build(),
+    ///         ))
+    ///     }
+    ///     fn as_param() -> mlua_extras::typed::Type {
+    ///         mlua_extras::typed::Type::named("Example")
+    ///     }
+    ///     fn as_return() -> mlua_extras::typed::Type {
+    ///         mlua_extras::typed::Type::named("Example")
+    ///     }
     /// }
     /// impl TypedUserData for Example {
     ///     fn add_documentation<F: mlua_extras::typed::TypedDataDocumentation<Self>>(docs: &mut F) {
@@ -221,7 +234,7 @@ impl DefinitionBuilder {
     /// Definitions::start()
     ///     .define("init", Definition::start()
     ///         .register::<Example>("Example")
-    ///         .value::<Example>("example")
+    ///         .proxy::<Example>("example")
     ///     )
     ///     .finish();
     /// ```
@@ -239,10 +252,10 @@ impl DefinitionBuilder {
     /// --- @type Example
     /// example = nil
     /// ```
-    pub fn value<T: Typed>(mut self, name: impl std::fmt::Display) -> Self {
+    pub fn proxy<T: Typed>(mut self, name: impl std::fmt::Display) -> Self {
         self.entries.push(Entry::new_with(
             name,
-            Type::Value(Box::new(T::ty())),
+            Type::Proxy(Box::new(T::ty())),
             self.queued_doc.take(),
         ));
         self

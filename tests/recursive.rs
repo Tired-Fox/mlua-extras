@@ -5,7 +5,7 @@ use mlua_extras::{
     Typed,
     mlua::Lua,
     typed::{
-        TypedDataFields, TypedDataMethods, TypedUserData, WrappedBuilder, generator::Definition,
+        TypedDataFields, TypedDataMethods, TypedUserData, generator::Definition, registry::wrapper,
     },
 };
 
@@ -36,12 +36,12 @@ impl FromLua for TestOption {
 
 impl UserData for TestOption {
     fn add_fields<F: mlua::UserDataFields<Self>>(fields: &mut F) {
-        let mut wrapper = WrappedBuilder::new(fields);
+        let mut wrapper = wrapper::TypedUserDataRegistry::new(fields);
         TypedUserData::add_fields(&mut wrapper);
     }
 
     fn add_methods<M: mlua::UserDataMethods<Self>>(methods: &mut M) {
-        let mut wrapper = WrappedBuilder::new(methods);
+        let mut wrapper = wrapper::TypedUserDataRegistry::new(methods);
         TypedUserData::add_methods(&mut wrapper);
     }
 }
@@ -151,6 +151,6 @@ fn test_recursive_types_in_methods() {
 
     Definition::start()
         .register::<TestOption>("Example")
-        .value::<TestOption>("obj")
+        .proxy::<TestOption>("obj")
         .finish();
 }

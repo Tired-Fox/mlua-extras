@@ -108,7 +108,7 @@ impl<'writer> DefinitionWriter<'writer> {
 
         for definition in self.definition.iter() {
             match &definition.ty {
-                Type::Value(ty) => {
+                Type::Proxy(ty) => {
                     if let Some(docs) = self.accumulate_docs(&[definition.doc.as_deref()]) {
                         writeln!(buffer, "{}", docs.join("\n"))?;
                     }

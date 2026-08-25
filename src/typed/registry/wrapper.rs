@@ -11,14 +11,16 @@ use super::{Type, Typed, TypedDataFields, TypedDataMethods, TypedMultiValue};
 /// Wrapper around a [`UserDataFields`] and [`UserDataMethods`]
 /// to allow [`TypedUserData`](super::TypedUserData) implementations to be used for [`mlua::UserData`]
 /// implementations
-pub struct WrappedBuilder<'ctx, U>(&'ctx mut U);
-impl<'ctx, U> WrappedBuilder<'ctx, U> {
+pub struct TypedUserDataRegistry<'ctx, U>(&'ctx mut U);
+impl<'ctx, U> TypedUserDataRegistry<'ctx, U> {
     pub fn new(u: &'ctx mut U) -> Self {
-        WrappedBuilder(u)
+        Self(u)
     }
 }
 
-impl<'ctx, T: UserData, U: UserDataFields<T>> TypedDataFields<T> for WrappedBuilder<'ctx, U> {
+impl<'ctx, T: UserData, U: UserDataFields<T>> TypedDataFields<T>
+    for TypedUserDataRegistry<'ctx, U>
+{
     fn document(&mut self, _doc: impl IntoDocComment) -> &mut Self {
         self
     }
@@ -112,7 +114,9 @@ impl<'ctx, T: UserData, U: UserDataFields<T>> TypedDataFields<T> for WrappedBuil
     }
 }
 
-impl<'ctx, T: UserData, U: UserDataMethods<T>> TypedDataMethods<T> for WrappedBuilder<'ctx, U> {
+impl<'ctx, T: UserData, U: UserDataMethods<T>> TypedDataMethods<T>
+    for TypedUserDataRegistry<'ctx, U>
+{
     fn document(&mut self, _documentation: impl IntoDocComment) -> &mut Self {
         self
     }
@@ -269,8 +273,9 @@ impl<'ctx, T: UserData, U: UserDataMethods<T>> TypedDataMethods<T> for WrappedBu
 mod tests {
     use super::*;
     use crate as mlua_extras;
+    use crate::Typed;
+    use crate::mlua::UserData;
     use crate::typed::TypedUserData;
-    use crate::{Typed, UserData};
 
     #[derive(Clone, Typed, UserData)]
     struct Counter {
