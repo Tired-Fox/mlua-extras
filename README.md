@@ -187,7 +187,7 @@ fn main() -> mlua::Result<()> {
             .register::<Color>("Color")?
             .register::<Example>("Example")
             .document("Example module")
-            .value::<Example>("example")
+            .proxy::<Example>("example")
             .function::<Color, ()>("printColor", ())
             .document("Greet the name that was passed in")
             .param("name", "Name of the person to greet")
@@ -405,7 +405,7 @@ local _CLASS_Counter_ = {
 	--- Increment the counter
 	--- @param self Counter
 	increment = function(self) end,
-    --- 
+    --- Transform the value to `up`
     --- @param value any Macro defined param doc comment
     transform = function(self, value) end,
 	__metatable = {

@@ -27,7 +27,7 @@
 //! The above notice applies to this file's code as a large portion is copied from, or closely replicates `mlua` to provide
 //! a similar experience while giving additional type information to `mlua_extras` typing system.
 //! 
-//! https://github.com/mlua-rs/mlua/blob/main/mlua_derive/src/userdata/mod.rshttps://github.com/mlua-rs
+//! https://github.com/mlua-rs/mlua/blob/main/mlua_derive/src/userdata/mod.rs
 
 use proc_macro2::TokenStream;
 use syn::{Attribute, Data, DeriveInput, Error, Fields, FieldsNamed, Meta};
