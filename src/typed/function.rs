@@ -148,6 +148,7 @@ where
 /// Helper to bake the type information for a lua [`Function`][mlua::Function]. This makes repeated
 /// calls to the [`Function`][mlua::Function]'s [`call`][mlua::Function::call] all the same with
 /// enforced arguments and return types.
+#[derive(Clone, Debug, PartialEq)]
 pub struct TypedFunction<Params, Response>
 where
     Params: TypedMultiValue,
